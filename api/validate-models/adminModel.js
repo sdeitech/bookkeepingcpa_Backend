@@ -18,3 +18,13 @@ module.exports.updateStaff = joi.object({
 module.exports.commonId = joi.object({
   id: joi.string().required()
 })
+
+module.exports.assignClient = joi.object({
+  clientId: joi.string().required(),
+  staffId: joi.string().required()
+})
+
+module.exports.unassignClient = joi.object({
+  clientId: joi.string().required(),
+  staffId: joi.string().required()
+})

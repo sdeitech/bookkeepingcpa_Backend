@@ -37,14 +37,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// ✅ Middleware
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json({ limit: '100mb' }));
+// ✅ Don't apply body parsers globally - let routes handle their own parsing
+// This allows the webhook route to receive raw body for signature verification
 
 console.log("NODE_ENV:", process.env.NODE_ENV);
 
-// ✅ API routes
-require('./api/routes')(app, validator);
+// ✅ API routes - each route module will handle its own body parsing
+require('./api/routes')(app, validator, bodyParser);
 
 // ✅ Connect DB
 const connectDB = require('./api/lib/db');

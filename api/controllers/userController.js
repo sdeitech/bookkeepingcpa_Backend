@@ -85,6 +85,7 @@ module.exports.signupUser = async (req, res) => {
 module.exports.signInUser = async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log(req.body);
         const emails = email.toLowerCase();
 
         // Find user by email
@@ -341,3 +342,156 @@ module.exports.getCurrentUser = async (req, res) => {
         });
     }
 }
+
+/**
+ * Update User Profile
+ * PUT /api/user/profile/update
+ * Protected route - requires authentication
+ * Cannot update: email, password, role_id
+ */
+module.exports.updateUserProfile = async (req, res) => {
+    try {
+        const userId = req.userInfo?.id;
+        
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please login",
+                data: null
+            });
+        }
+
+        // Extract only allowed fields for update
+        const allowedUpdates = ['first_name', 'last_name', 'phoneNumber', 'dob', 'address', 'profile'];
+        const updates = {};
+        
+        // Only include fields that are in the request and are allowed
+        for (const field of allowedUpdates) {
+            if (req.body[field] !== undefined) {
+                updates[field] = req.body[field];
+            }
+        }
+
+        // Validate phone number if provided
+        if (updates.phoneNumber) {
+            const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
+            if (!phoneRegex.test(updates.phoneNumber)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid phone number format",
+                    data: null
+                });
+            }
+        }
+
+        // Validate DOB if provided (should be in past)
+        if (updates.dob) {
+            const dobDate = new Date(updates.dob);
+            if (dobDate > new Date()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Date of birth cannot be in the future",
+                    data: null
+                });
+            }
+        }
+
+        // Update user profile
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: updates },
+            {
+                new: true,
+                runValidators: true,
+                select: '-password' // Exclude password from response
+            }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                data: null
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            data: updatedUser
+        });
+
+    } catch (error) {
+        console.error("Error in updateUserProfile:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            data: null
+        });
+    }
+};
+
+/**
+ * Upload Profile Picture
+ * POST /api/user/profile/upload-picture
+ * Protected route - requires authentication
+ */
+module.exports.uploadProfilePicture = async (req, res) => {
+    try {
+        const userId = req.userInfo?.id;
+        
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please login",
+                data: null
+            });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: "No file uploaded",
+                data: null
+            });
+        }
+
+        // Get file path (multer middleware should have already saved the file)
+        const profilePicturePath = `/uploads/profile-images/${req.file.filename}`;
+
+        // Update user profile with new picture path
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $set: { profile: profilePicturePath } },
+            {
+                new: true,
+                select: '-password'
+            }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                data: null
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile picture updated successfully",
+            data: {
+                user: updatedUser,
+                profilePicturePath
+            }
+        });
+
+    } catch (error) {
+        console.error("Error in uploadProfilePicture:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            data: null
+        });
+    }
+};
