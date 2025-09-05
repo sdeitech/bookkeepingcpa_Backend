@@ -41,9 +41,20 @@ module.exports.signupUser = async (req, res) => {
                     const newUser = new User(userInfo)
                     let users = await newUser.save();
                     if (users) {
+                        // Generate JWT token for auto-login after signup
+                        const accessToken = await jwtService.issueJwtToken({
+                            email: users.email,
+                            id: users._id,
+                            first_name: users.first_name,
+                            role_id: users.role_id
+                        });
+
+                        // Remove password from response
+                        users.password = undefined;
+
                         resModel.success = true;
                         resModel.message = "User Registration Successful";
-                        resModel.data = users
+                        resModel.data = { token: accessToken, user: users };
                         res.status(200).json(resModel)
 
                     } else {

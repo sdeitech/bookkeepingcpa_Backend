@@ -11,8 +11,8 @@ const Role = require('../api/models/roleModel');
 
 // Super Admin credentials
 const SUPER_ADMIN = {
-    email: 'admin@plurify.com',
-    password: 'Admin@123',
+    email: 'admin@plutify.com',
+    password: 'admin@123',
     first_name: 'Super',
     last_name: 'Admin',
     role_id: '1'
