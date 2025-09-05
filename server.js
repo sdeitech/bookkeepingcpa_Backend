@@ -1,6 +1,4 @@
 const http = require('http');
-const https = require('https');
-const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
 const validator = require('express-joi-validation').createValidator({
@@ -76,21 +74,13 @@ app.use('*', (req, res) => {
     });
 });
 
-// ✅ Start server: HTTPS in staging, HTTP otherwise
-const server = process.env.NODE_ENV === "staging"
-    ? https.createServer(
-        {
-            key: fs.readFileSync("/path/to/ssl/privkey.pem"),
-            cert: fs.readFileSync("/path/to/ssl/fullchain.pem")
-        },
-        app
-    )
-    : http.createServer(app);
+// ✅ Simple HTTP server
+const server = http.createServer(app);
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8081;
 
 server.listen(PORT, () => {
-    console.log(`✅ Plurify Backend listening on ${process.env.NODE_ENV === 'staging' ? 'HTTPS' : 'HTTP'} port ${PORT}`);
+    console.log(`✅ Plurify Backend listening on HTTP port ${PORT}`);
     console.log(`✅ Environment: ${process.env.NODE_ENV}`);
     console.log(`✅ Database: ${process.env.MONGO_URI}`);
 });
