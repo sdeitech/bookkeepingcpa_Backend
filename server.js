@@ -69,6 +69,10 @@ app.get('/health', (req, res) => {
     });
 });
 
+// ✅ Standard OAuth only - No custom app handling needed
+// Shopify OAuth callbacks will go directly to /api/shopify/auth/callback
+// No root URL interception needed for standard OAuth flow
+
 // ✅ 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({

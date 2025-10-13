@@ -164,8 +164,8 @@ const notificationSchema = new mongoose.Schema({
   
   // Expiration
   expiresAt: {
-    type: Date,
-    index: true
+    type: Date
+    // index will be added separately with expireAfterSeconds option
   },
   
   // Status tracking
@@ -189,8 +189,8 @@ const notificationSchema = new mongoose.Schema({
   
   // Group notifications
   groupId: {
-    type: String,
-    index: true
+    type: String
+    // index will be added separately below
   },
   
   // Retry information

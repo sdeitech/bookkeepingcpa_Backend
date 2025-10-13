@@ -19,6 +19,10 @@ const amazonValidation = {
 
   // Get orders validation
   getOrders: Joi.object({
+    // Admin override parameter (optional)
+    clientId: Joi.string().optional().messages({
+      'string.base': 'Client ID must be a valid string'
+    }),
     marketplaceId: Joi.string().optional().messages({
       'string.base': 'Marketplace ID must be a string'
     }),
@@ -45,6 +49,10 @@ const amazonValidation = {
 
   // Get inventory validation
   getInventory: Joi.object({
+    // Admin override parameter (optional)
+    clientId: Joi.string().optional().messages({
+      'string.base': 'Client ID must be a valid string'
+    }),
     marketplaceId: Joi.string().optional().messages({
       'string.base': 'Marketplace ID must be a string'
     }),
@@ -56,6 +64,10 @@ const amazonValidation = {
 
   // Get financial events validation
   getFinancialEvents: Joi.object({
+    // Admin override parameter (optional)
+    clientId: Joi.string().optional().messages({
+      'string.base': 'Client ID must be a valid string'
+    }),
     postedAfter: Joi.date().iso().optional().messages({
       'date.base': 'Posted after must be a valid date',
       'date.format': 'Posted after must be in ISO format'
@@ -111,6 +123,10 @@ const amazonValidation = {
 
   // Get report document validation
   getReportDocument: Joi.object({
+    // Admin override parameter (optional)
+    clientId: Joi.string().optional().messages({
+      'string.base': 'Client ID must be a valid string'
+    }),
     reportDocumentId: Joi.string().required().messages({
       'string.base': 'Report document ID must be a string',
       'string.empty': 'Report document ID cannot be empty',

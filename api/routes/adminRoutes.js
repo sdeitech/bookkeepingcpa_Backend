@@ -97,4 +97,18 @@ module.exports = function (app, validator) {
         auth.requireAdmin,
         adminCntrl.getAdminDashboard
     );
+    
+    // Client Profile Viewing (Admin Override)
+    app.get('/api/admin/client/:clientId/profile',
+        auth,
+        auth.requireAdmin,
+        adminCntrl.getClientProfile
+    );
+    
+    // Get all clients for selection
+    app.get('/api/admin/clients-list',
+        auth,
+        auth.requireAdmin,
+        adminCntrl.getAllClients
+    );
 }
