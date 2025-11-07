@@ -6,6 +6,10 @@ const Transaction = require('../models/stripe/transaction.model');
 const BillingInfo = require('../models/stripe/billingInfo.model');
 const Stripe = require('stripe');
 const dotenv = require('dotenv');
+const emailService = require('../services/email.service');
+const User = require('../models/userModel');
+const Notification = require('../models/notification');
+const firebaseRealtime = require('../services/firebase.realtime.service');
 
 
 dotenv.config();
@@ -235,6 +239,82 @@ const createSubscription = async (req, res) => {
       paymentMethodId,
       { ...billingDetails, billingPeriod }
     );
+
+    // If subscription is successful and active, send welcome email and create notification
+    if (result.stripeSubscription.status === 'active' || result.stripeSubscription.status === 'trialing') {
+      // Fetch user details for the email
+      const user = await User.findById(userId);
+      
+      if (user) {
+        // Send welcome email (don't wait for it to complete)
+        emailService.sendWelcomeEmail({
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email
+        }).then(emailResult => {
+          if (emailResult.success) {
+            console.log('Welcome email sent successfully after payment to:', user.email);
+          } else {
+            console.log('Failed to send welcome email after payment to:', user.email, emailResult.error);
+          }
+        }).catch(emailError => {
+          console.error('Error sending welcome email after payment:', emailError);
+        });
+
+        // Create notification in database for the bell
+        try {
+          const plan = await SubscriptionPlan.findById(planId);
+          const notification = new Notification({
+            type: 'payment',
+            title: 'Payment Successful! 🎉',
+            message: `Your ${plan ? plan.name : 'subscription'} is now active. Welcome to our platform!`,
+            recipientId: userId,
+            senderId: userId, // Self-notification from system
+            senderName: 'System',
+            senderRole: 'system',
+            priority: 'high',
+            category: 'alert',
+            actionUrl: '/dashboard',
+            actionType: 'navigate',
+            actionLabel: 'Go to Dashboard',
+            metadata: {
+              subscriptionId: result.userSubscription._id.toString(),
+              planId: planId,
+              planName: plan ? plan.name : 'Subscription',
+              amount: result.userSubscription.amount,
+              currency: result.userSubscription.currency,
+              billingPeriod: billingPeriod,
+              stripeSubscriptionId: result.stripeSubscription.id
+            },
+            relatedEntities: {
+              paymentId: result.userSubscription._id
+            },
+            isRead: false,
+            status: 'sent',
+            deliveryStatus: {
+              inApp: {
+                sent: true,
+                sentAt: new Date()
+              }
+            },
+            tags: ['payment', 'subscription', 'welcome']
+          });
+
+          await notification.save();
+          console.log('Payment notification created successfully for user:', userId);
+          
+          // Emit Firebase real-time signal for instant delivery
+          await firebaseRealtime.emitNotificationSignal(
+            userId,
+            notification._id,
+            'new'
+          );
+        } catch (notificationError) {
+          console.error('Error creating payment notification:', notificationError);
+          // Don't fail the payment process if notification creation fails
+        }
+      }
+    }
 
     // Return comprehensive data structure for frontend
     return res.status(200).json({

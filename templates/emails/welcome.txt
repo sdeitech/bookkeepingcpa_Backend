@@ -1,0 +1,50 @@
+Welcome to {{companyName}}!
+
+Hello {{firstName}}! 👋
+
+We're thrilled to have you join the {{companyName}} family! Your account has been successfully created, and you're now part of a community that's revolutionizing bookkeeping and financial management.
+
+================================
+YOUR ACCOUNT DETAILS:
+================================
+Email: {{email}}
+Account Type: Client Account
+Registration Date: Today
+
+================================
+GET STARTED WITH THESE FEATURES:
+================================
+✓ Complete Your Profile - Add your business details and preferences
+✓ Explore Services - Discover our comprehensive bookkeeping solutions
+✓ Upload Documents - Securely store and manage your financial documents
+✓ Connect Accounts - Link your business accounts for seamless integration
+✓ Schedule Consultation - Book a free consultation with our experts
+
+================================
+ACCESS YOUR DASHBOARD:
+================================
+Visit: {{loginUrl}}
+
+================================
+NEED HELP GETTING STARTED?
+================================
+Our support team is here to assist you every step of the way.
+
+Help Center: {{loginUrl}}/help
+Email Support: {{supportEmail}}
+Video Tutorials: {{loginUrl}}/tutorials
+
+We're committed to making your bookkeeping experience smooth and efficient. If you have any questions or need assistance, don't hesitate to reach out.
+
+Best regards,
+The {{companyName}} Team
+
+================================
+
+© {{currentYear}} {{companyName}}. All rights reserved.
+
+You received this email because you signed up for an account at {{companyName}}.
+
+Unsubscribe: {{loginUrl}}/unsubscribe
+Email Preferences: {{loginUrl}}/preferences
+Privacy Policy: {{loginUrl}}/privacy

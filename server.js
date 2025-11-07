@@ -1,4 +1,6 @@
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
 const validator = require('express-joi-validation').createValidator({
@@ -11,6 +13,10 @@ const dotenv = require('dotenv');
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, `.env.${process.env.NODE_ENV}`) });
+
+// Initialize Firebase Admin SDK (MUST be after env variables are loaded)
+require('./api/config/firebase.config');
+console.log('🔥 Firebase Admin SDK initialized');
 
 const app = express();
 
@@ -57,13 +63,17 @@ app.use((err, req, res, next) => {
 
 // ✅ Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        success: true, 
+    res.status(200).json({
+        success: true,
         message: 'Plurify Backend API is running',
         environment: process.env.NODE_ENV,
         timestamp: new Date().toISOString()
     });
 });
+
+// ✅ Standard OAuth only - No custom app handling needed
+// Shopify OAuth callbacks will go directly to /api/shopify/auth/callback
+// No root URL interception needed for standard OAuth flow
 
 // ✅ 404 handler
 app.use('*', (req, res) => {
@@ -74,13 +84,19 @@ app.use('*', (req, res) => {
     });
 });
 
-// ✅ Simple HTTP server
-const server = http.createServer(app);
 
 const PORT = process.env.PORT || 8081;
+const server = process.env.NODE_ENV === "staging"
+    ? https.createServer(
+        {
+            key: fs.readFileSync("/home/ubuntu/ssl/privkey.pem"),
+            cert: fs.readFileSync("/home/ubuntu/ssl/fullchain.pem")
+        },
+        app
+    )
+    : http.createServer(app);
 
 server.listen(PORT, () => {
-    console.log(`✅ Plurify Backend listening on HTTP port ${PORT}`);
-    console.log(`✅ Environment: ${process.env.NODE_ENV}`);
-    console.log(`✅ Database: ${process.env.MONGO_URI}`);
+    console.log(`App listening on ${process.env.NODE_ENV === 'staging' ? 'HTTPS' : 'HTTP'} port ${PORT}`);
 });
+

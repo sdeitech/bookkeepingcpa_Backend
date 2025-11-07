@@ -2,6 +2,7 @@ const AmazonSeller = require('../models/amazonSellerModel');
 const amazonService = require('../services/amazon.services.sdk');
 const encryptionService = require('../services/encryption.services');
 const resModel = require('../lib/resModel');
+const { getUserId } = require('../utils/getUserContext');
 
 const amazonController = {
   /**
@@ -10,7 +11,7 @@ const amazonController = {
    */
   getAuthorizationUrl: async (req, res) => {
     try {
-      const userId = req.userInfo?.id; // From JWT auth middleware
+      const userId = getUserId(req); // Support admin override
       
       if (!userId) {
         resModel.success = false;
@@ -142,7 +143,7 @@ const amazonController = {
    */
   refreshToken: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller) {
@@ -175,7 +176,7 @@ const amazonController = {
       
       // If refresh fails, mark account as inactive
       await AmazonSeller.findOneAndUpdate(
-        { userId: req.userInfo?.id },
+        { userId: getUserId(req) },
         {
           isActive: false,
           lastError: {
@@ -199,7 +200,7 @@ const amazonController = {
    */
   getConnectionStatus: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId })
         .select('isActive sellerId sellerName sellerEmail marketplaceIds lastSyncedAt tokenExpiresAt createdAt');
       
@@ -245,7 +246,7 @@ const amazonController = {
    */
   disconnect: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller) {
@@ -277,7 +278,7 @@ const amazonController = {
    */
   getOrders: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller || !seller.isActive) {
@@ -336,7 +337,7 @@ const amazonController = {
    */
   getInventory: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller || !seller.isActive) {
@@ -391,7 +392,7 @@ const amazonController = {
    */
   getFinancialEvents: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller || !seller.isActive) {
@@ -447,7 +448,7 @@ const amazonController = {
    */
   createReport: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const { reportType, dataStartTime, dataEndTime } = req.body;
       
       if (!reportType) {
@@ -506,7 +507,7 @@ const amazonController = {
    */
   getReportDocument: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const { reportDocumentId } = req.params;
       
       if (!reportDocumentId) {
@@ -560,7 +561,7 @@ const amazonController = {
    */
   getDashboardData: async (req, res) => {
     try {
-      const userId = req.userInfo?.id;
+      const userId = getUserId(req);
       const seller = await AmazonSeller.findOne({ userId });
       
       if (!seller || !seller.isActive) {

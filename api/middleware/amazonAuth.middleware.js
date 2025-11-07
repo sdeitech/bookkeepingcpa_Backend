@@ -2,6 +2,7 @@ const AmazonSeller = require('../models/amazonSellerModel');
 const amazonService = require('../services/amazon.services');
 const encryptionService = require('../services/encryption.services');
 const resModel = require('../lib/resModel');
+const { getUserId } = require('../utils/getUserContext');
 
 /**
  * Middleware to check if user has an active Amazon connection
@@ -9,7 +10,8 @@ const resModel = require('../lib/resModel');
  */
 const amazonAuthMiddleware = async (req, res, next) => {
   try {
-    const userId = req.userInfo?.id; // From JWT auth middleware
+    // Use getUserId to support admin override
+    const userId = getUserId(req);
     
     if (!userId) {
       return resModel.error(res, 'User authentication required', null, 401);
@@ -77,7 +79,8 @@ const amazonAuthMiddleware = async (req, res, next) => {
  */
 const amazonAuthOptional = async (req, res, next) => {
   try {
-    const userId = req.userInfo?.id;
+    // Use getUserId to support admin override
+    const userId = getUserId(req);
     
     if (!userId) {
       return next();

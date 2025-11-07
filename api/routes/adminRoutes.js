@@ -4,6 +4,7 @@ const adminCntrl = require('../controllers/adminController');
 
 /* Middleware import starts */
 const auth = require('../middleware/auth');
+const bodyParser = require('body-parser');
 /* Middleware import ends */
 
 /* validate model import starts */
@@ -11,13 +12,17 @@ const adminModel = require('../validate-models/adminModel');
 /* validate model import ends */
 
 module.exports = function (app, validator) {
+    // Create JSON parser middleware
+    const jsonParser = bodyParser.json();
+    
     // All admin routes require authentication and admin role
     
     // Staff Management Routes (Super Admin only)
-    app.post('/api/admin/create-staff', 
-        auth, 
-        auth.requireAdmin, 
-        validator.body(adminModel.createStaff), 
+    app.post('/api/admin/create-staff',
+        jsonParser,  // Add body parser here
+        auth,
+        auth.requireAdmin,
+        validator.body(adminModel.createStaff),
         adminCntrl.createStaff
     );
     
@@ -27,11 +32,12 @@ module.exports = function (app, validator) {
         adminCntrl.getAllStaff
     );
     
-    app.put('/api/admin/update-staff/:id', 
-        auth, 
-        auth.requireAdmin, 
+    app.put('/api/admin/update-staff/:id',
+        jsonParser,  // Add body parser here
+        auth,
+        auth.requireAdmin,
         validator.params(adminModel.commonId),
-        validator.body(adminModel.updateStaff), 
+        validator.body(adminModel.updateStaff),
         adminCntrl.updateStaff
     );
     
@@ -51,6 +57,7 @@ module.exports = function (app, validator) {
     
     // Client Assignment Management Routes
     app.post('/api/admin/assign-client',
+        jsonParser,  // Add body parser here
         auth,
         auth.requireAdmin,
         validator.body(adminModel.assignClient),
@@ -58,6 +65,7 @@ module.exports = function (app, validator) {
     );
     
     app.delete('/api/admin/unassign-client',
+        jsonParser,  // Add body parser here (DELETE with body)
         auth,
         auth.requireAdmin,
         validator.body(adminModel.unassignClient),
@@ -88,5 +96,19 @@ module.exports = function (app, validator) {
         auth,
         auth.requireAdmin,
         adminCntrl.getAdminDashboard
+    );
+    
+    // Client Profile Viewing (Admin Override)
+    app.get('/api/admin/client/:clientId/profile',
+        auth,
+        auth.requireAdmin,
+        adminCntrl.getClientProfile
+    );
+    
+    // Get all clients for selection
+    app.get('/api/admin/clients-list',
+        auth,
+        auth.requireAdmin,
+        adminCntrl.getAllClients
     );
 }

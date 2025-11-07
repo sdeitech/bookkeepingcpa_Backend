@@ -3,7 +3,9 @@ const jwtService = require('../services/jwt.services');
 const resModel = require('../lib/resModel');
 let User = require("../models/userModel");
 let Role = require("../models/roleModel");
+let Onboarding = require("../models/onboarding.model");
 const bcryptServices = require('../services/bcrypt.services');
+const emailService = require('../services/email.service');
 
 /**
  * @api {post} /api/admin/signup Signup User
@@ -51,11 +53,20 @@ module.exports.signupUser = async (req, res) => {
 
                         // Remove password from response
                         users.password = undefined;
+                        
+                        // Add onboarding_completed status for client users
+                        // New signups will have onboarding_completed: false
+                        const userResponse = users.toObject();
+                        if (userResponse.role_id === '3') {
+                            userResponse.onboarding_completed = false;
+                        } else {
+                            userResponse.onboarding_completed = true; // Non-clients don't need onboarding
+                        }
 
                         resModel.success = true;
                         resModel.message = "User Registration Successful";
-                        resModel.data = { token: accessToken, user: users };
-                        res.status(200).json(resModel)
+                        resModel.data = { token: accessToken, user: userResponse };
+                        res.status(200).json(resModel);
 
                     } else {
                         resModel.success = false;
@@ -135,10 +146,22 @@ module.exports.signInUser = async (req, res) => {
 
         // Remove password from response
         userCheck.password = undefined;
+        
+        // Get user response object
+        const userResponse = userCheck.toObject();
+        
+        // Check onboarding status for client users
+        if (userResponse.role_id === '3') {
+            const onboardingRecord = await Onboarding.findOne({ userId: userCheck._id });
+            userResponse.onboarding_completed = onboardingRecord ? onboardingRecord.completed : false;
+        } else {
+            // Non-clients don't need onboarding
+            userResponse.onboarding_completed = true;
+        }
 
         resModel.success = true;
         resModel.message = "User Login Successfully";
-        resModel.data = { token: accessToken, user: userCheck };
+        resModel.data = { token: accessToken, user: userResponse };
         res.status(200).json(resModel);
 
     } catch (error) {
@@ -198,9 +221,22 @@ module.exports.googleWithLogin = async (req, res) => {
         const userCheck = await User.findOne({ email });
         if (userCheck) {
             const accessToken = await jwtService.issueJwtToken({ email, id: userCheck._id, name: userCheck?.first_name })
+            
+            // Remove password from response
+            userCheck.password = undefined;
+            
+            // Get user response object and check onboarding status
+            const userResponse = userCheck.toObject();
+            if (userResponse.role_id === '3') {
+                const onboardingRecord = await Onboarding.findOne({ userId: userCheck._id });
+                userResponse.onboarding_completed = onboardingRecord ? onboardingRecord.completed : false;
+            } else {
+                userResponse.onboarding_completed = true;
+            }
+            
             resModel.success = true;
             resModel.message = "User Login Successfully";
-            resModel.data = { token: accessToken, user: userCheck };
+            resModel.data = { token: accessToken, user: userResponse };
             res.status(200).json(resModel);
         } else {
             let userInfo = {
@@ -215,9 +251,22 @@ module.exports.googleWithLogin = async (req, res) => {
             let userCheck = await newUser.save();
             if (userCheck) {
                 const accessToken = await jwtService.issueJwtToken({ email, id: userCheck._id })
+                
+                // Remove password from response
+                userCheck.password = undefined;
+                
+                // Get user response object and add onboarding status
+                const userResponse = userCheck.toObject();
+                if (userResponse.role_id === '3') {
+                    // New Google signups for clients will have onboarding_completed: false
+                    userResponse.onboarding_completed = false;
+                } else {
+                    userResponse.onboarding_completed = true;
+                }
+                
                 resModel.success = true;
                 resModel.message = "User Login Successfully";
-                resModel.data = { token: accessToken, user: userCheck };
+                resModel.data = { token: accessToken, user: userResponse };
                 res.status(200).json(resModel);
             } else {
                 resModel.success = false;

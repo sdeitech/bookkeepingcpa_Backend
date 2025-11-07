@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to plutify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+        }
+        
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .email-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .email-header h1 {
+            font-size: 28px;
+            margin-top: 20px;
+            font-weight: 300;
+        }
+        
+        .email-body {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 24px;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #555555;
+            margin-bottom: 30px;
+        }
+        
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 30px 0;
+        }
+        
+        .info-box h3 {
+            color: #333333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background-color: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            margin-right: 15px;
+            font-size: 14px;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.3s ease;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .help-section {
+            background-color: #fafafa;
+            padding: 30px;
+            border-radius: 8px;
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .help-section h3 {
+            color: #333333;
+            margin-bottom: 15px;
+        }
+        
+        .help-links {
+            margin-top: 20px;
+        }
+        
+        .help-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 14px;
+        }
+        
+        .email-footer {
+            background-color: #2c3e50;
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .social-links {
+            margin: 20px 0;
+        }
+        
+        .social-links a {
+            display: inline-block;
+            width: 35px;
+            height: 35px;
+            background-color: #667eea;
+            color: white;
+            text-align: center;
+            line-height: 35px;
+            border-radius: 50%;
+            margin: 0 5px;
+            text-decoration: none;
+        }
+        
+        .footer-text {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-top: 20px;
+        }
+        
+        .footer-text a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        @media only screen and (max-width: 600px) {
+            .email-wrapper {
+                width: 100%;
+            }
+            
+            .email-header,
+            .email-body,
+            .email-footer {
+                padding: 20px;
+            }
+            
+            .greeting {
+                font-size: 20px;
+            }
+            
+            .cta-button {
+                padding: 12px 30px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <!-- Header -->
+        <div class="email-header">
+            <div class="logo">{{companyName}}</div>
+            <h1>Welcome Aboard! 🎉</h1>
+        </div>
+        
+        <!-- Body -->
+        <div class="email-body">
+            <h2 class="greeting">Hello {{firstName}}! 👋</h2>
+            
+            <p class="message">
+                We're thrilled to have you join the {{companyName}} family! Your account has been successfully created, 
+                and you're now part of a community that's revolutionizing bookkeeping and financial management.
+            </p>
+            
+            <div class="info-box">
+                <h3>Your Account Details:</h3>
+                <p><strong>Email:</strong> {{email}}</p>
+                <p><strong>Account Type:</strong> Client Account</p>
+                <p><strong>Registration Date:</strong> Today</p>
+            </div>
+            
+            <h3 style="margin-top: 30px; margin-bottom: 20px;">🚀 Get Started with These Features:</h3>
+            <ul class="feature-list">
+                <li>
+                    <span class="feature-icon">✓</span>
+                    <span><strong>Complete Your Profile:</strong> Add your business details and preferences</span>
+                </li>
+                <li>
+                    <span class="feature-icon">✓</span>
+                    <span><strong>Explore Services:</strong> Discover our comprehensive bookkeeping solutions</span>
+                </li>
+                <li>
+                    <span class="feature-icon">✓</span>
+                    <span><strong>Upload Documents:</strong> Securely store and manage your financial documents</span>
+                </li>
+                <li>
+                    <span class="feature-icon">✓</span>
+                    <span><strong>Connect Accounts:</strong> Link your business accounts for seamless integration</span>
+                </li>
+                <li>
+                    <span class="feature-icon">✓</span>
+                    <span><strong>Schedule Consultation:</strong> Book a free consultation with our experts</span>
+                </li>
+            </ul>
+            
+            <div class="cta-section">
+                <a href="{{loginUrl}}" class="cta-button">Access Your Dashboard</a>
+            </div>
+            
+            <div class="help-section">
+                <h3>Need Help Getting Started?</h3>
+                <p>Our support team is here to assist you every step of the way.</p>
+                <div class="help-links">
+                    <a href="{{loginUrl}}/help">Help Center</a>
+                    <a href="mailto:{{supportEmail}}">Email Support</a>
+                    <a href="{{loginUrl}}/tutorials">Video Tutorials</a>
+                </div>
+            </div>
+            
+            <p style="margin-top: 30px; color: #666;">
+                We're committed to making your bookkeeping experience smooth and efficient. 
+                If you have any questions or need assistance, don't hesitate to reach out.
+            </p>
+            
+            <p style="margin-top: 20px; color: #666;">
+                Best regards,<br>
+                <strong>The {{companyName}} Team</strong>
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="email-footer">
+            <div class="social-links">
+                <a href="#" title="Facebook">f</a>
+                <a href="#" title="Twitter">𝕏</a>
+                <a href="#" title="LinkedIn">in</a>
+                <a href="#" title="Instagram">📷</a>
+            </div>
+            
+            <div class="footer-text">
+                <p>&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
+                <p style="margin-top: 10px;">
+                    You received this email because you signed up for an account at {{companyName}}.
+                </p>
+                <p style="margin-top: 10px;">
+                    <a href="{{loginUrl}}/unsubscribe">Unsubscribe</a> | 
+                    <a href="{{loginUrl}}/preferences">Email Preferences</a> | 
+                    <a href="{{loginUrl}}/privacy">Privacy Policy</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

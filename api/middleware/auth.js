@@ -71,6 +71,45 @@ const auth = async (req, res, next) => {
                             role_id: user.role_id
                         };
                         
+                        // Admin override: Allow admin to access client data via clientId query parameter
+                        if (user.role_id === '1' && req.query.clientId) {
+                            // Verify the target client exists
+                            const targetClient = await User.findById(req.query.clientId).select('_id email name active');
+                            
+                            if (!targetClient) {
+                                return res.status(404).json({
+                                    success: false,
+                                    data: null,
+                                    message: "Target client not found",
+                                    error: "CLIENT_NOT_FOUND"
+                                });
+                            }
+                            
+                            if (!targetClient.active) {
+                                return res.status(403).json({
+                                    success: false,
+                                    data: null,
+                                    message: "Target client account is inactive",
+                                    error: "CLIENT_INACTIVE"
+                                });
+                            }
+                            
+                            // Set target user context for admin access
+                            req.targetUserId = req.query.clientId;
+                            req.isAdminOverride = true;
+                            req.targetUser = {
+                                id: targetClient._id.toString(),
+                                email: targetClient.email,
+                                name: targetClient.name
+                            };
+                            
+                            console.log(`[Admin Override] Admin ${decoded.email} accessing client ${targetClient.email} data`);
+                        } else {
+                            // Normal user accessing their own data
+                            req.targetUserId = decoded.id;
+                            req.isAdminOverride = false;
+                        }
+                        
                         if (process.env.NODE_ENV === 'development') {
                             console.log('[Auth Middleware] Authentication successful for user:', decoded.email);
                         }

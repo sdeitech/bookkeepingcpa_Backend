@@ -4,6 +4,10 @@ const resModel = require('../lib/resModel');
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 const AssignClient = require("../models/assignClientsModel");
+const progressService = require('../services/progress.service');
+const ShopifyStore = require('../models/shopifyStoreModel');
+const AmazonSeller = require('../models/amazonSellerModel');
+const QuickBooksCompany = require('../models/quickbooksCompanyModel');
 
 /**
  * Create Staff Member
@@ -270,6 +274,151 @@ module.exports.reactivateStaff = async (req, res) => {
 };
 
 /**
+ * Get Client Profile with Integration Details
+ * GET /api/admin/client/:clientId/profile
+ * Admin can view any client's complete profile and integration status
+ */
+module.exports.getClientProfile = async (req, res) => {
+    try {
+        const { clientId } = req.params;
+        const adminId = req.userInfo?.id;
+        
+        // Verify admin role
+        const adminUser = await User.findById(adminId);
+        if (!adminUser || adminUser.role_id !== '1') {
+            resModel.success = false;
+            resModel.message = "Admin access required";
+            resModel.data = null;
+            return res.status(403).json(resModel);
+        }
+        
+        // Get client details
+        const client = await User.findById(clientId)
+            .select('-password -resetPasswordToken -resetPasswordExpires');
+            
+        if (!client) {
+            resModel.success = false;
+            resModel.message = 'Client not found';
+            resModel.data = null;
+            return res.status(404).json(resModel);
+        }
+        
+        // Check integration connections in parallel
+        const [shopify, amazon, quickbooks] = await Promise.all([
+            ShopifyStore.findOne({ userId: clientId, isActive: true })
+                .select('shopName shopDomain shopEmail shopPlan shopCountry shopCurrency lastSyncedAt createdAt'),
+            AmazonSeller.findOne({ userId: clientId, isActive: true })
+                .select('sellerName sellerId sellerEmail marketplaceIds lastSyncedAt createdAt'),
+            QuickBooksCompany.findOne({ userId: clientId, isActive: true })
+                .select('companyName companyId companyEmail lastSyncedAt createdAt')
+        ]);
+        
+        // Build response
+        const profileData = {
+            client: {
+                id: client._id,
+                email: client.email,
+                name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+                firstName: client.first_name,
+                lastName: client.last_name,
+                businessName: client.businessName,
+                phone: client.phoneNumber,
+                active: client.active,
+                createdAt: client.createdAt,
+                updatedAt: client.updatedAt
+            },
+            integrations: {
+                shopify: shopify ? {
+                    connected: true,
+                    shopName: shopify.shopName,
+                    shopDomain: shopify.shopDomain,
+                    shopEmail: shopify.shopEmail,
+                    shopPlan: shopify.shopPlan,
+                    shopCountry: shopify.shopCountry,
+                    shopCurrency: shopify.shopCurrency,
+                    lastSync: shopify.lastSyncedAt,
+                    connectedSince: shopify.createdAt
+                } : { connected: false },
+                amazon: amazon ? {
+                    connected: true,
+                    sellerName: amazon.sellerName,
+                    sellerId: amazon.sellerId,
+                    sellerEmail: amazon.sellerEmail,
+                    marketplaceIds: amazon.marketplaceIds,
+                    lastSync: amazon.lastSyncedAt,
+                    connectedSince: amazon.createdAt
+                } : { connected: false },
+                quickbooks: quickbooks ? {
+                    connected: true,
+                    companyName: quickbooks.companyName,
+                    companyId: quickbooks.companyId,
+                    companyEmail: quickbooks.companyEmail,
+                    lastSync: quickbooks.lastSyncedAt,
+                    connectedSince: quickbooks.createdAt
+                } : { connected: false }
+            }
+        };
+        
+        resModel.success = true;
+        resModel.message = 'Client profile retrieved successfully';
+        resModel.data = profileData;
+        return res.status(200).json(resModel);
+    } catch (error) {
+        console.error('Get client profile error:', error);
+        resModel.success = false;
+        resModel.message = error.message || 'Failed to get client profile';
+        resModel.data = null;
+        return res.status(500).json(resModel);
+    }
+};
+
+/**
+ * Get All Clients for Admin Selection
+ * GET /api/admin/clients-list
+ * Returns simplified client list for selection dropdown
+ */
+module.exports.getAllClients = async (req, res) => {
+    try {
+        const adminId = req.userInfo?.id;
+        
+        // Verify admin role
+        const adminUser = await User.findById(adminId);
+        if (!adminUser || adminUser.role_id !== '1') {
+            resModel.success = false;
+            resModel.message = "Admin access required";
+            resModel.data = null;
+            return res.status(403).json(resModel);
+        }
+        
+        // Get all clients with role_id = '3'
+        const clients = await User.find({ role_id: '3' })
+            .select('_id email first_name last_name businessName active createdAt')
+            .sort({ createdAt: -1 });
+        
+        // Format response for easier frontend consumption
+        const formattedClients = clients.map(client => ({
+            id: client._id,
+            email: client.email,
+            name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+            businessName: client.businessName,
+            active: client.active,
+            createdAt: client.createdAt
+        }));
+        
+        resModel.success = true;
+        resModel.message = 'Clients retrieved successfully';
+        resModel.data = formattedClients;
+        return res.status(200).json(resModel);
+    } catch (error) {
+        console.error('Get all clients error:', error);
+        resModel.success = false;
+        resModel.message = error.message || 'Failed to get clients';
+        resModel.data = null;
+        return res.status(500).json(resModel);
+    }
+};
+
+/**
  * Get Dashboard Stats for Admin
  * GET /api/admin/dashboard
  */
@@ -524,9 +673,9 @@ module.exports.getStaffClients = async (req, res) => {
 };
 
 /**
- * Get All Clients with Assignment Status
+ * Get All Clients with Assignment Status and Progress
  * GET /api/admin/clients-with-assignments
- * Shows all clients and their assignment status
+ * Shows all clients and their assignment status with progress indicators
  */
 module.exports.getClientsWithAssignments = async (req, res) => {
     try {
@@ -560,14 +709,23 @@ module.exports.getClientsWithAssignments = async (req, res) => {
             };
         });
         
-        // Combine clients with their assignment info
+        // Get progress data for all clients
+        const clientIds = clients.map(client => client._id);
+        const progressMap = await progressService.getMultipleClientsProgress(clientIds);
+        
+        // Combine clients with their assignment info and progress
         const clientsWithAssignments = clients.map(client => ({
             ...client.toObject(),
-            assignedStaff: assignmentMap[client._id.toString()] || null
+            assignedStaff: assignmentMap[client._id.toString()] || null,
+            progress: progressMap[client._id.toString()] || {
+                onboarding: { completed: false, step: null },
+                subscription: { status: 'none', planName: null, interval: null, expiresAt: null },
+                integrations: { amazon: false, shopify: false }
+            }
         }));
         
         resModel.success = true;
-        resModel.message = "Clients with assignments retrieved successfully";
+        resModel.message = "Clients with assignments and progress retrieved successfully";
         resModel.data = clientsWithAssignments;
         res.status(200).json(resModel);
         

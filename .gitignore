@@ -10,9 +10,9 @@ yarn-error.log*
 # !.env.*.example
 # !.env.example
 # .env.local
-.env.dev
+# .env.dev
 # .env.test.local
-.env.prod
+# .env.prod
 # .env.staging
 
 # Logs
