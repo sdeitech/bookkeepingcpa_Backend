@@ -39,15 +39,15 @@ const quickbooksController = {
         isActive: true
       });
 
-      if (existingCompany) {
-        resModel.success = false;
-        resModel.message = 'QuickBooks account already connected. Please disconnect first to reconnect.';
-        resModel.data = {
-          connected: true,
-          companyName: existingCompany.companyName
-        };
-        return res.status(400).json(resModel);
-      }
+      // if (existingCompany) {
+      //   resModel.success = false;
+      //   resModel.message = 'QuickBooks account already connected. Please disconnect first to reconnect.';
+      //   resModel.data = {
+      //     connected: true,
+      //     companyName: existingCompany.companyName
+      //   };
+      //   return res.status(400).json(resModel);
+      // }
 
       // Generate authorization URL with state
       const { url, state } = quickbooksService.generateAuthUrl(userId);
@@ -87,7 +87,7 @@ const quickbooksController = {
       // Check for authorization errors first
       if (error) {
         console.error('❌ QuickBooks authorization error:', error);
-        const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=false&error=${encodeURIComponent(error)}`;
+        const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent(error)}`;
         return res.redirect(frontendUrl);
       }
 
@@ -101,14 +101,14 @@ const quickbooksController = {
         const errorMessage = `Missing required parameters: ${missingParams.join(', ')}`;
         console.error('❌', errorMessage);
         console.error('📍 This usually indicates an issue with the OAuth flow or redirect URI configuration');
-        const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=false&error=${encodeURIComponent(errorMessage)}`;
+        const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent(errorMessage)}`;
         return res.redirect(frontendUrl);
       }
 
       // Validate and extract userId from state
       if (!state.includes(':')) {
         console.error('❌ Invalid state format. Expected "userId:randomString"');
-        const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=false&error=${encodeURIComponent('Invalid state parameter')}`;
+        const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent('Invalid state parameter')}`;
         return res.redirect(frontendUrl);
       }
 
@@ -118,7 +118,7 @@ const quickbooksController = {
 
       if (!userId || !stateToken) {
         console.error('❌ Invalid state components');
-        const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=false&error=${encodeURIComponent('Invalid state parameter format')}`;
+        const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent('Invalid state parameter format')}`;
         return res.redirect(frontendUrl);
       }
 
@@ -187,12 +187,12 @@ const quickbooksController = {
       console.log(`✅ QuickBooks connected: ${companyData.companyName} (${companyData.companyId})`);
 
       // Redirect to frontend with success
-      const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=true&company=${encodeURIComponent(companyData.companyName)}`;
+      const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_connected=true&company=${encodeURIComponent(companyData.companyName)}`;
       return res.redirect(frontendUrl);
       
     } catch (error) {
       console.error('❌ Handle callback error:', error);
-      const frontendUrl = `${process.env.FRONTEND_URL}/quickbooks-callback?success=false&error=${encodeURIComponent(error.message)}`;
+      const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent(error.message)}`;
       return res.redirect(frontendUrl);
     }
   },

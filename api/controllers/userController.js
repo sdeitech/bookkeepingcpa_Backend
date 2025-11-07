@@ -66,7 +66,7 @@ module.exports.signupUser = async (req, res) => {
                         resModel.success = true;
                         resModel.message = "User Registration Successful";
                         resModel.data = { token: accessToken, user: userResponse };
-                        res.status(200).json(resModel)
+                        res.status(200).json(resModel);
 
                     } else {
                         resModel.success = false;

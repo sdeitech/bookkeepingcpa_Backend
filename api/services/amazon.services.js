@@ -390,7 +390,7 @@ class AmazonService {
       console.error('Create report error:', error);
       throw new Error(`Failed to create report: ${error.message}`);
     }
-  }
+  } 
 
   /**
    * Get report document

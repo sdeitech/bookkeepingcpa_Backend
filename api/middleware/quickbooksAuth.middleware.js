@@ -63,6 +63,7 @@ const quickbooksAuthMiddleware = async (req, res, next) => {
         
         // Mark connection as inactive
         company.isActive = false;
+
         await company.recordError(refreshError);
         
         resModel.success = false;
