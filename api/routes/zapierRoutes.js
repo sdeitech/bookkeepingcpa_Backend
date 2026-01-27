@@ -1,29 +1,20 @@
-/* Controller import starts */
-const zapierJobCntrl = require("../controllers/zapierController");
-/* Controller import ends */
+const bodyParser = require('body-parser');
+const {
+  createClientInIgnition,
+  testZapierWebhook
+} = require('../controllers/zapierController');
 
-const bodyParser = require("body-parser");
-
-module.exports = function (app) {
+module.exports = function (app, validator) {
+  // Apply body parser for JSON
   const jsonParser = bodyParser.json();
 
-  // Create Zapier Job
-  app.post(
-    "/api/zapier/job",
-    jsonParser,
-    zapierJobCntrl.createZapierJob
-  );
+  // Create client in Ignition via Zapier webhook
+  // POST /api/integrations/zapier/lead
+  app.post('/api/integrations/zapier/lead', jsonParser, createClientInIgnition);
 
-  // Zapier status callback
-  app.post(
-    "/api/zapier/status",
-    jsonParser,
-    zapierJobCntrl.zapierStatusCallback
-  );
-
-  // Get job status
-  app.get(
-    "/api/zapier/job/:requestId",
-    zapierJobCntrl.getZapierJobStatus
-  );
+  // Test Zapier webhook (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    app.post('/api/integrations/zapier/test', jsonParser, testZapierWebhook);
+  }
 };
+
