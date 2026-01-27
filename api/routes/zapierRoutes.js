@@ -1,7 +1,8 @@
 const bodyParser = require('body-parser');
 const {
   createClientInIgnition,
-  testZapierWebhook
+  testZapierWebhook,
+  zapierStatusCallback
 } = require('../controllers/zapierController');
 
 module.exports = function (app, validator) {
@@ -11,6 +12,11 @@ module.exports = function (app, validator) {
   // Create client in Ignition via Zapier webhook
   // POST /api/integrations/zapier/lead
   app.post('/api/integrations/zapier/lead', jsonParser, createClientInIgnition);
+  app.post(
+    "/api/zapier/status",
+    jsonParser,
+    zapierStatusCallback
+  );
 
   // Test Zapier webhook (development only)
   if (process.env.NODE_ENV !== 'production') {
