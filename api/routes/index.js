@@ -9,6 +9,7 @@ module.exports = function (app, validator) {
     require('./onboardingRoutes')(app, validator)
     require('./notificationRoutes')(app, validator)
     require('./documentRoutes')(app, validator)  // Document upload/management routes
+    require('./zapierRoutes')(app, validator)  // Zapier integration routes
     
     // Test routes for Firebase notifications (only in development/staging)
     if (process.env.NODE_ENV !== 'production') {
