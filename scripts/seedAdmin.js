@@ -21,7 +21,7 @@ const SUPER_ADMIN = {
 async function seedSuperAdmin() {
     try {
         // Connect to MongoDB
-        const dbUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/plurify';
+        const dbUri = process.env.MONGO_URI || 'mongodb://localhost:27017/plutify_db';
         await mongoose.connect(dbUri, {
             useNewUrlParser: true,
             useUnifiedTopology: true
