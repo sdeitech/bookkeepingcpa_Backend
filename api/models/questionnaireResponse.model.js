@@ -14,6 +14,13 @@ const questionnaireResponseSchema = new mongoose.Schema({
     required: [true, 'Name is required'],
     trim: true
   },
+  // Optional link to an onboarded User (set after payment/onboarding)
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
   answers: {
     q1Revenue: {
       type: String,
@@ -56,6 +63,11 @@ const questionnaireResponseSchema = new mongoose.Schema({
     enum: ['pending', 'proposal_sent', 'signed', 'onboarded'],
     default: 'pending',
     index: true
+  },
+  // When payment is confirmed (via Ignition/Stripe webhook flow)
+  paidAt: {
+    type: Date,
+    default: null
   },
   metadata: {
     ipAddress: {

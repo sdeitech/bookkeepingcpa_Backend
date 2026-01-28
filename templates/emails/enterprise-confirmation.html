@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Enterprise Consultation Request</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #0f766e, #14b8a6); color: #ffffff; padding: 24px; text-align: center; border-radius: 10px 10px 0 0; }
+    .content { background: #f9fafb; padding: 24px; border-radius: 0 0 10px 10px; }
+    .btn { display: inline-block; background: #0f766e; color: #ffffff; padding: 10px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0; }
+    .muted { color: #6b7280; font-size: 14px; }
+    .footer { text-align: center; margin-top: 24px; color: #9ca3af; font-size: 12px; }
+    h1, h2, h3 { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Consultation Request Received</h1>
+      <p class="muted">Thank you for your interest in our Enterprise plan</p>
+    </div>
+    <div class="content">
+      <h2>Hello {{name}},</h2>
+      <p>
+        Thank you for completing the <strong>Enterprise consultation request</strong> for the
+        <strong>{{planName}}</strong> plan with {{companyName}}.
+      </p>
+
+      <p>
+        We’ve received your details and our team will review your information before your call.
+      </p>
+
+      <h3>Next steps</h3>
+      <ol>
+        <li><strong>Book your consultation:</strong> Use the scheduling link to choose a time that works best for you.</li>
+        <li><strong>Join the call:</strong> You’ll receive a calendar invite with a meeting link.</li>
+        <li><strong>Custom proposal:</strong> After the call, we’ll prepare and send you a tailored engagement proposal.</li>
+      </ol>
+
+      {{#if calendlyUrl}}
+      <p style="text-align: center;">
+        <a href="{{calendlyUrl}}" class="btn" target="_blank" rel="noopener noreferrer">
+          Schedule Your Consultation
+        </a>
+      </p>
+      {{/if}}
+
+      <p class="muted">
+        If you have any questions before the call, feel free to reply to this email or contact us at
+        <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.
+      </p>
+
+      <p>Looking forward to speaking with you,<br />The {{companyName}} Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
+      <p class="muted">You are receiving this email because you requested an Enterprise consultation.</p>
+    </div>
+  </div>
+</body>
+</html>
+

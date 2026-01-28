@@ -1,4 +1,5 @@
 const QuestionnaireResponse = require('../models/questionnaireResponse.model');
+const emailService = require('../services/email.service');
 
 /**
  * Plan recommendation logic (same as frontend)
@@ -248,4 +249,5 @@ module.exports = {
   getQuestionnaireByEmail,
   recommendPlan // Export for testing
 };
+
 

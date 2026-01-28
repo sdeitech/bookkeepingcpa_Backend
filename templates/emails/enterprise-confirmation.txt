@@ -1,0 +1,25 @@
+Subject: Your Enterprise Consultation Request
+
+Hello {{name}},
+
+Thank you for completing the Enterprise consultation request for the {{planName}} plan with {{companyName}}.
+
+We’ve received your details and our team will review your information before your call.
+
+Next steps:
+1) Book your consultation using the scheduling link.
+2) Join the call from the calendar invite you receive.
+3) After the call, we’ll prepare and send you a tailored engagement proposal.
+
+{{#if calendlyUrl}}
+Schedule your consultation here:
+{{calendlyUrl}}
+{{/if}}
+
+If you have any questions before the call, please reply to this email or contact us at {{supportEmail}}.
+
+Looking forward to speaking with you,
+The {{companyName}} Team
+
+© {{currentYear}} {{companyName}}. All rights reserved.
+
