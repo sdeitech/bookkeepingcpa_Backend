@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Enterprise Consultation Request</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; }
+    .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+    .header { background: #111827; color: #f9fafb; padding: 20px; border-radius: 10px 10px 0 0; }
+    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 10px 10px; }
+    .section { margin-bottom: 20px; }
+    .label { font-weight: 600; color: #4b5563; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: #eef2ff; color: #4338ca; }
+    .meta { font-size: 13px; color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    th { background: #f3f4f6; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>New Enterprise Consultation Request</h2>
+      <p class="meta">A new prospective client has requested an Enterprise consultation.</p>
+    </div>
+    <div class="content">
+      <div class="section">
+        <p><span class="label">Client Name:</span> {{clientName}}</p>
+        <p><span class="label">Client Email:</span> <a href="mailto:{{clientEmail}}">{{clientEmail}}</a></p>
+        <p><span class="label">Plan:</span> <span class="badge">{{planName}}</span></p>
+        <p class="meta">Submitted at: {{submittedAt}}</p>
+      </div>
+
+      <div class="section">
+        <h3>Questionnaire Summary</h3>
+        <table>
+          <tr>
+            <th>Question</th>
+            <th>Answer</th>
+          </tr>
+          <tr>
+            <td>Revenue</td>
+            <td>{{revenue}}</td>
+          </tr>
+          <tr>
+            <td>Support Level</td>
+            <td>{{supportLevel}}</td>
+          </tr>
+          <tr>
+            <td>Customization Needed</td>
+            <td>{{customization}}</td>
+          </tr>
+          <tr>
+            <td>Business Structure</td>
+            <td>{{businessStructure}}</td>
+          </tr>
+          <tr>
+            <td>Cleanup Required</td>
+            <td>{{cleanup}}</td>
+          </tr>
+          <tr>
+            <td>Tax Assistance</td>
+            <td>{{tax}}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>Recommended Next Steps</h3>
+        <ul>
+          <li>Review the client’s details and questionnaire responses.</li>
+          <li>Prepare any initial questions or documents needed for the call.</li>
+          <li>Join the scheduled consultation at the chosen time.</li>
+          <li>After the call, create and send a tailored proposal in Ignition.</li>
+        </ul>
+      </div>
+
+      {{#if ignitionClientLink}}
+      <div class="section">
+        <p><span class="label">Ignition Client Record:</span>
+          <a href="{{ignitionClientLink}}" target="_blank" rel="noopener noreferrer">
+            Open in Ignition
+          </a>
+        </p>
+      </div>
+      {{/if}}
+
+      <div class="section">
+        <p class="meta">
+          This notification was sent automatically from {{companyName}}.
+          Please follow up with the client as soon as possible.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+

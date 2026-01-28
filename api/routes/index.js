@@ -7,8 +7,11 @@ module.exports = function (app, validator) {
     require('./quickbooksRoutes')(app, validator)  // QuickBooks integration
     require('./stripeRoutes')(app, validator)
     require('./onboardingRoutes')(app, validator)
+    require('./questionnaireRoutes')(app, validator)  // Questionnaire submission routes
+    require('./zapierRoutes')(app, validator)  // Zapier/Ignition integration routes
     require('./notificationRoutes')(app, validator)
     require('./documentRoutes')(app, validator)  // Document upload/management routes
+    require('./zapierRoutes')(app, validator)  // Zapier integration routes
     
     // Test routes for Firebase notifications (only in development/staging)
     if (process.env.NODE_ENV !== 'production') {

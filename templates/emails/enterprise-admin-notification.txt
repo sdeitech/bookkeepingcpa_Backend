@@ -1,0 +1,30 @@
+Subject: New Enterprise Consultation Request - {{clientName}}
+
+A new Enterprise consultation request has been submitted.
+
+Client details:
+- Name: {{clientName}}
+- Email: {{clientEmail}}
+- Plan: {{planName}}
+- Submitted at: {{submittedAt}}
+
+Questionnaire summary:
+- Revenue: {{revenue}}
+- Support Level: {{supportLevel}}
+- Customization Needed: {{customization}}
+- Business Structure: {{businessStructure}}
+- Cleanup Required: {{cleanup}}
+- Tax Assistance: {{tax}}
+
+Recommended next steps:
+1) Review the client’s details and questionnaire responses.
+2) Join the scheduled consultation at the chosen time.
+3) Prepare and send a tailored proposal in Ignition after the call.
+
+{{#if ignitionClientLink}}
+Ignition client record:
+{{ignitionClientLink}}
+{{/if}}
+
+This notification was sent automatically from {{companyName}}.
+
