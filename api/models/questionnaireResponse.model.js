@@ -69,6 +69,10 @@ const questionnaireResponseSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  expiresAt: {
+    type: Date,
+    index: { expireAfterSeconds: 0 }, // MongoDB TTL
+  },
   metadata: {
     ipAddress: {
       type: String,

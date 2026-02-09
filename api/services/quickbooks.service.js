@@ -12,12 +12,12 @@ class QuickBooksService {
       redirectUri: process.env.QUICKBOOKS_REDIRECT_URI,
       logging: process.env.NODE_ENV === 'development' // Enable logging in development
     });
-    
+
     // API base URL depends on environment
-    this.apiBaseUrl = process.env.QUICKBOOKS_ENVIRONMENT === 'production' 
+    this.apiBaseUrl = process.env.QUICKBOOKS_ENVIRONMENT === 'production'
       ? 'https://quickbooks.api.intuit.com'
       : 'https://sandbox-quickbooks.api.intuit.com';
-    
+
     console.log('🏢 QuickBooks Service initialized');
     console.log('📍 Environment:', process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox');
     console.log('📍 Redirect URI:', process.env.QUICKBOOKS_REDIRECT_URI);
@@ -37,15 +37,15 @@ class QuickBooksService {
       OAuthClient.scopes.Phone,
       OAuthClient.scopes.Address
     ];
-    
+
     const authUri = this.oauthClient.authorizeUri({
       scope: scopes,
       state: `${userId}:${state}`
     });
-    
+
     console.log('🔗 Generated QuickBooks auth URL');
     console.log('📍 Scopes:', scopes.join(' '));
-    
+
     return {
       url: authUri,
       state: `${userId}:${state}`
@@ -67,29 +67,29 @@ class QuickBooksService {
       console.log('  - Client Secret:', process.env.QUICKBOOKS_CLIENT_SECRET ? 'Present' : 'Missing');
       console.log('  - Redirect URI:', process.env.QUICKBOOKS_REDIRECT_URI);
       console.log('  - Environment:', process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox');
-      
+
       // Manual token exchange using axios (bypassing intuit-oauth library issue)
       const axios = require('axios');
       const qs = require('querystring');
-      
+
       console.log('📍 Performing manual OAuth 2.0 token exchange');
-      
+
       // Prepare the token exchange request
       const tokenEndpoint = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
       const credentials = Buffer.from(`${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64');
-      
+
       const requestData = qs.stringify({
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: process.env.QUICKBOOKS_REDIRECT_URI
       });
-      
+
       console.log('📍 Token exchange request data:', {
         grant_type: 'authorization_code',
         code: code ? 'Present' : 'Missing',
         redirect_uri: process.env.QUICKBOOKS_REDIRECT_URI
       });
-      
+
       const response = await axios.post(tokenEndpoint, requestData, {
         headers: {
           'Authorization': `Basic ${credentials}`,
@@ -97,10 +97,10 @@ class QuickBooksService {
           'Accept': 'application/json'
         }
       });
-      
+
       console.log('✅ Manual token exchange successful');
       const tokenData = response.data;
-      
+
       // Return in the same format as the library would
       return {
         accessToken: tokenData.access_token,
@@ -110,20 +110,20 @@ class QuickBooksService {
         realmId: realmId, // We get this from the callback, not the token response
         tokenType: tokenData.token_type || 'Bearer'
       };
-      
+
     } catch (error) {
       // If manual approach fails, try the library approach as fallback
       console.log('❌ Manual token exchange failed, trying library approach...');
       console.log('📍 Manual exchange error:', error.response?.data || error.message);
-      
+
       try {
         console.log('📍 Fallback: Using intuit-oauth library');
         const authResponse = await this.oauthClient.createToken(code);
-        
+
         console.log('✅ Token exchange successful via library fallback');
         console.log('📍 Token type:', authResponse.token_type);
         console.log('📍 Expires in:', authResponse.expires_in, 'seconds');
-        
+
         return {
           accessToken: authResponse.access_token || authResponse.getToken().access_token,
           refreshToken: authResponse.refresh_token || authResponse.getToken().refresh_token,
@@ -135,7 +135,7 @@ class QuickBooksService {
       } catch (libraryError) {
         console.error('❌ Both manual and library token exchange failed');
         console.error('📍 Library error:', libraryError.message);
-        
+
         // Log detailed error information
         if (error.response) {
           console.error('📍 HTTP Status:', error.response.status);
@@ -146,7 +146,7 @@ class QuickBooksService {
           console.error('📍 HTTP Headers:', error.authResponse.headers || 'None');
           console.error('📍 Response Body:', error.authResponse.body || 'Empty');
           console.error('📍 Response JSON:', error.authResponse.json || 'None');
-          
+
           // Try to parse and log specific QuickBooks error
           try {
             const responseData = error.authResponse.json || JSON.parse(error.authResponse.body || '{}');
@@ -160,11 +160,11 @@ class QuickBooksService {
             console.error('📍 Could not parse error response:', parseError.message);
           }
         }
-        
+
         // Log additional context
         console.error('📍 Original error message:', error.message);
         console.error('📍 Error stack:', error.stack);
-        
+
         // Create more informative error message
         let errorMessage = 'QuickBooks token exchange failed';
         if (error.response?.data?.error_description) {
@@ -178,13 +178,13 @@ class QuickBooksService {
         } else if (error.message) {
           errorMessage += `: ${error.message}`;
         }
-        
+
         if (error.response?.status) {
           errorMessage += ` (HTTP ${error.response.status})`;
         } else if (error.authResponse?.status) {
           errorMessage += ` (HTTP ${error.authResponse.status})`;
         }
-        
+
         throw new Error(errorMessage);
       }
     }
@@ -201,12 +201,12 @@ class QuickBooksService {
         refresh_token: refreshToken,
         token_type: 'Bearer'
       });
-      
+
       const authResponse = await this.oauthClient.refresh();
-      
+
       console.log('✅ Token refresh successful');
       console.log('📍 New expires in:', authResponse.expires_in || 3600, 'seconds');
-      
+
       return {
         accessToken: authResponse.access_token || authResponse.getToken().access_token,
         refreshToken: authResponse.refresh_token || authResponse.getToken().refresh_token,
@@ -227,13 +227,13 @@ class QuickBooksService {
   async makeApiCall(options) {
     try {
       const axios = require('axios');
-      
+
       console.log('🌐 Making QuickBooks API call:', {
         method: options.method || 'GET',
         url: options.url,
         hasAuth: !!options.headers?.Authorization
       });
-      
+
       const response = await axios({
         method: options.method || 'GET',
         url: options.url,
@@ -244,17 +244,17 @@ class QuickBooksService {
         },
         data: options.body ? JSON.parse(options.body) : undefined
       });
-      
+
       console.log('✅ API call successful:', response.status);
       return response.data;
-      
+
     } catch (error) {
       console.error('❌ API call failed:', error);
-      
+
       // Handle QuickBooks API errors according to official documentation
       if (error.response?.data) {
         const errorData = error.response.data;
-        
+
         // QuickBooks returns errors in Fault structure
         if (errorData.Fault) {
           const fault = errorData.Fault;
@@ -263,12 +263,12 @@ class QuickBooksService {
           throw new Error(`QuickBooks API Error: ${errorMessage} (Code: ${errorDetails.code || fault.code || 'N/A'})`);
         }
       }
-      
+
       // Handle HTTP errors
       if (error.response) {
         throw new Error(`QuickBooks API HTTP Error: ${error.response.status} - ${error.response.statusText}`);
       }
-      
+
       throw error;
     }
   }
@@ -280,7 +280,7 @@ class QuickBooksService {
   async getCompanyInfo(accessToken, realmId) {
     try {
       console.log('🏢 Fetching company info for realmId:', realmId);
-      
+
       // Make direct API call with proper authorization header
       const response = await this.makeApiCall({
         url: `${this.apiBaseUrl}/v3/company/${realmId}/companyinfo/${realmId}`,
@@ -290,9 +290,9 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       console.log('✅ Company info fetched successfully');
-      
+
       // QuickBooks returns company info in QueryResponse.CompanyInfo array
       if (response.QueryResponse?.CompanyInfo) {
         return response.QueryResponse.CompanyInfo[0];
@@ -302,7 +302,7 @@ class QuickBooksService {
         console.error('❌ Unexpected response structure:', response);
         throw new Error('Company info not found in response');
       }
-      
+
     } catch (error) {
       console.error('❌ Failed to fetch company info:', error);
       throw new Error(`Failed to fetch company info: ${error.message}`);
@@ -324,7 +324,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response.QueryResponse?.Invoice || [];
     } catch (error) {
       console.error('❌ Failed to fetch invoices:', error);
@@ -348,7 +348,7 @@ class QuickBooksService {
         },
         body: JSON.stringify(invoiceData)
       });
-      
+
       return response.Invoice;
     } catch (error) {
       console.error('❌ Failed to create invoice:', error);
@@ -371,7 +371,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response.QueryResponse?.Customer || [];
     } catch (error) {
       console.error('❌ Failed to fetch customers:', error);
@@ -385,22 +385,38 @@ class QuickBooksService {
    */
   async getExpenses(accessToken, realmId, params = {}) {
     try {
-      const query = this.buildQuery('Expense', params);
+      // ✅ IMPORTANT: use Purchase, not Expense
+      const query = this.buildQuery('Purchase', {
+        ...params,
+        paymentTypes: ['Cash', 'CreditCard']
+      });
+
       const response = await this.makeApiCall({
         url: `${this.apiBaseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}`,
         method: 'GET',
         headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/text'
         }
       });
-      
-      return response.QueryResponse?.Expense || [];
+
+      // ✅ Purchase, not Expense
+      return response.QueryResponse?.Purchase || [];
     } catch (error) {
-      console.error('❌ Failed to fetch expenses:', error);
-      throw new Error(`Failed to fetch expenses: ${error.message}`);
+      console.error(
+        '❌ Failed to fetch expenses:',
+        JSON.stringify(error.response?.data, null, 2)
+      );
+
+      const qbError = error.response?.data?.fault?.error?.[0];
+
+      throw new Error(
+        qbError?.message || 'Failed to fetch expenses from QuickBooks'
+      );
     }
   }
+
 
   /**
    * Get vendors
@@ -417,7 +433,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response.QueryResponse?.Vendor || [];
     } catch (error) {
       console.error('❌ Failed to fetch vendors:', error);
@@ -440,7 +456,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response.QueryResponse?.Bill || [];
     } catch (error) {
       console.error('❌ Failed to fetch bills:', error);
@@ -459,7 +475,7 @@ class QuickBooksService {
         end_date: params.endDate,
         summarize_column_by: params.summarizeBy || 'Total'
       }).toString();
-      
+
       const response = await this.makeApiCall({
         url: `${this.apiBaseUrl}/v3/company/${realmId}/reports/ProfitAndLoss?${queryParams}`,
         method: 'GET',
@@ -468,7 +484,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response;
     } catch (error) {
       console.error('❌ Failed to fetch P&L report:', error);
@@ -487,7 +503,7 @@ class QuickBooksService {
         end_date: params.endDate,
         summarize_column_by: params.summarizeBy || 'Total'
       }).toString();
-      
+
       const response = await this.makeApiCall({
         url: `${this.apiBaseUrl}/v3/company/${realmId}/reports/BalanceSheet?${queryParams}`,
         method: 'GET',
@@ -496,7 +512,7 @@ class QuickBooksService {
           'Authorization': `Bearer ${accessToken}`
         }
       });
-      
+
       return response;
     } catch (error) {
       console.error('❌ Failed to fetch balance sheet:', error);
@@ -515,12 +531,12 @@ class QuickBooksService {
         refresh_token: refreshToken,
         token_type: 'Bearer'
       });
-      
+
       const response = await this.oauthClient.revoke({
         access_token: false,
         refresh_token: true
       });
-      
+
       console.log('✅ Tokens revoked successfully');
       return true;
     } catch (error) {
@@ -554,7 +570,7 @@ class QuickBooksService {
         access_token: accessToken,
         token_type: 'Bearer'
       });
-      
+
       const response = await this.oauthClient.getUserInfo();
       return response.getJson();
     } catch (error) {
@@ -570,7 +586,7 @@ class QuickBooksService {
   buildQuery(entity, params = {}) {
     let query = `SELECT * FROM ${entity}`;
     const conditions = [];
-    
+
     // Helper function to format dates for QuickBooks API
     const formatDateForQuickBooks = (dateInput) => {
       let date;
@@ -581,15 +597,15 @@ class QuickBooksService {
       } else {
         return dateInput; // Return as-is if not a recognizable date
       }
-      
+
       // QuickBooks expects YYYY-MM-DD format
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      
+
       return `${year}-${month}-${day}`;
     };
-    
+
     if (params.startDate) {
       const formattedStartDate = formatDateForQuickBooks(params.startDate);
       conditions.push(`MetaData.CreateTime >= '${formattedStartDate}'`);
@@ -606,19 +622,19 @@ class QuickBooksService {
     if (params.active !== undefined) {
       conditions.push(`Active = ${params.active}`);
     }
-    
+
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
-    
+
     if (params.orderBy) {
       query += ` ORDERBY ${params.orderBy}`;
     }
-    
+
     if (params.limit) {
       query += ` MAXRESULTS ${params.limit}`;
     }
-    
+
     console.log('🔍 Generated QuickBooks query:', query);
     return query;
   }
@@ -638,16 +654,16 @@ class QuickBooksService {
    */
   verifyWebhookSignature(signature, payload, webhookToken) {
     const crypto = require('crypto');
-    
+
     if (!webhookToken) {
       webhookToken = process.env.QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN;
     }
-    
+
     const hash = crypto
       .createHmac('sha256', webhookToken)
       .update(payload)
       .digest('base64');
-    
+
     return hash === signature;
   }
 }

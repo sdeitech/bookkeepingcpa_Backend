@@ -5,6 +5,7 @@ const ZapierJob = require('../models/zapierJob.model');
 const emailService = require('../services/email.service');
 const User = require('../models/userModel');
 const bcryptService = require('../services/bcrypt.services');
+const EngagementLetter = require("../models/EngagementLetter");
 
 /**
  * Format questionnaire data for Zapier webhook
@@ -58,31 +59,31 @@ const formatDataForZapier = (questionnaireData) => {
  * @param {Object} options - { ignitionClientLink, submittedAt }
  */
 async function sendEnterpriseEmails(questionnaireData, options = {}) {
-  try {
-    const { email, name, answers, recommendedPlan } = questionnaireData;
-    if (!email || !name || recommendedPlan !== 'enterprise') {
-      return;
-    }
+    try {
+        const { email, name, answers, recommendedPlan } = questionnaireData;
+        if (!email || !name || recommendedPlan !== 'enterprise') {
+            return;
+        }
 
-    const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
-    const supportEmail = process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
-    const submittedAt = options.submittedAt || new Date().toISOString();
-    const ignitionClientLink = options.ignitionClientLink || '';
+        const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
+        const supportEmail = process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+        const submittedAt = options.submittedAt || new Date().toISOString();
+        const ignitionClientLink = options.ignitionClientLink || '';
 
-    // Map raw codes to something slightly more readable (best‑effort, safe for demo)
-    const codeOr = (val, fallback) => val || fallback;
-    const revenue = codeOr(answers?.q1Revenue, 'N/A');
-    const supportLevel = codeOr(answers?.q2Support, 'N/A');
-    const customization = codeOr(answers?.q3Customization, 'N/A');
-    const businessStructure = codeOr(answers?.q4Structure, 'N/A');
-    const cleanup = codeOr(answers?.q5Cleanup, 'N/A');
-    const tax = codeOr(answers?.q6Tax, 'N/A');
+        // Map raw codes to something slightly more readable (best‑effort, safe for demo)
+        const codeOr = (val, fallback) => val || fallback;
+        const revenue = codeOr(answers?.q1Revenue, 'N/A');
+        const supportLevel = codeOr(answers?.q2Support, 'N/A');
+        const customization = codeOr(answers?.q3Customization, 'N/A');
+        const businessStructure = codeOr(answers?.q4Structure, 'N/A');
+        const cleanup = codeOr(answers?.q5Cleanup, 'N/A');
+        const tax = codeOr(answers?.q6Tax, 'N/A');
 
-    const planName = 'Enterprise';
+        const planName = 'Enterprise';
 
-    // --- User confirmation email (simple HTML/text for now) ---
-    const userSubject = `Your ${planName} consultation request with ${companyName}`;
-    const userHtml = `
+        // --- User confirmation email (simple HTML/text for now) ---
+        const userSubject = `Your ${planName} consultation request with ${companyName}`;
+        const userHtml = `
       <p>Hi ${name},</p>
       <p>Thank you for requesting an <strong>${planName}</strong> consultation with <strong>${companyName}</strong>.</p>
       <p>We’ve received your details and our team will review your information before the call.</p>
@@ -90,7 +91,7 @@ async function sendEnterpriseEmails(questionnaireData, options = {}) {
       <p>If you have any questions before the call, you can reply to this email or contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
       <p>Best regards,<br/>The ${companyName} Team</p>
     `;
-    const userText = `
+        const userText = `
 Hi ${name},
 
 Thank you for requesting an ${planName} consultation with ${companyName}.
@@ -105,18 +106,18 @@ Best regards,
 The ${companyName} Team
     `.trim();
 
-    await emailService.sendEmail({
-      to: email,
-      subject: userSubject,
-      html: userHtml,
-      text: userText,
-    });
+        await emailService.sendEmail({
+            to: email,
+            subject: userSubject,
+            html: userHtml,
+            text: userText,
+        });
 
-    // --- Admin notification email ---
-    const adminTo =
-      process.env.ADMIN_EMAIL || supportEmail || process.env.SMTP_USER;
-    const adminSubject = `New Enterprise consultation request - ${name}`;
-    const adminHtml = `
+        // --- Admin notification email ---
+        const adminTo =
+            process.env.ADMIN_EMAIL || supportEmail || process.env.SMTP_USER;
+        const adminSubject = `New Enterprise consultation request - ${name}`;
+        const adminHtml = `
       <p><strong>New Enterprise consultation request received.</strong></p>
       <p><strong>Client:</strong> ${name} &lt;${email}&gt;</p>
       <p><strong>Plan:</strong> ${planName}</p>
@@ -130,14 +131,13 @@ The ${companyName} Team
         <li>Cleanup Required: ${cleanup}</li>
         <li>Tax Assistance: ${tax}</li>
       </ul>
-      ${
-        ignitionClientLink
-          ? `<p><strong>Ignition client record:</strong> <a href="${ignitionClientLink}" target="_blank" rel="noopener noreferrer">${ignitionClientLink}</a></p>`
-          : ''
-      }
+      ${ignitionClientLink
+                ? `<p><strong>Ignition client record:</strong> <a href="${ignitionClientLink}" target="_blank" rel="noopener noreferrer">${ignitionClientLink}</a></p>`
+                : ''
+            }
       <p>Please review the client’s details and follow up from Ignition.</p>
     `;
-    const adminText = `
+        const adminText = `
 New Enterprise consultation request received.
 
 Client: ${name} <${email}>
@@ -156,15 +156,15 @@ ${ignitionClientLink ? `Ignition client record: ${ignitionClientLink}` : ''}
 Please review the client’s details and follow up from Ignition.
     `.trim();
 
-    await emailService.sendEmail({
-      to: adminTo,
-      subject: adminSubject,
-      html: adminHtml,
-      text: adminText,
-    });
-  } catch (err) {
-    console.error('Error sending Enterprise consultation emails:', err);
-  }
+        await emailService.sendEmail({
+            to: adminTo,
+            subject: adminSubject,
+            html: adminHtml,
+            text: adminText,
+        });
+    } catch (err) {
+        console.error('Error sending Enterprise consultation emails:', err);
+    }
 }
 
 /**
@@ -181,6 +181,7 @@ Please review the client’s details and follow up from Ignition.
 const createClientInIgnition = async (req, res) => {
     try {
         const { questionnaireId, email, name, answers, recommendedPlan } = req.body;
+        console.log("Create Client Request Body:", req.body);
         const requestId = crypto.randomUUID();
         const user = await ZapierJob.findOne({
             "payload.Contact Email": email,
@@ -249,17 +250,16 @@ const createClientInIgnition = async (req, res) => {
             });
         }
 
-    // Format data for Zapier
+        // Format data for Zapier
         const formatedData = formatDataForZapier(questionnaireData);
         const zapierData = {
-          ...formatedData,
-          requestId,
-          status: 'PENDING',
+            ...formatedData,
+            requestId,
         };
         const job = await ZapierJob.create({
-          requestId,
-          payload: zapierData,
-          status: 'PENDING',
+            requestId,
+            payload: zapierData,
+            status: 'PENDING',
         });
 
         // Call Zapier webhook
@@ -320,22 +320,22 @@ const createClientInIgnition = async (req, res) => {
 
         // Fire-and-forget emails for Enterprise consultations
         if (questionnaireData.recommendedPlan === 'enterprise') {
-          // best-effort, don't await in the main response chain
-          void sendEnterpriseEmails(questionnaireData, {
-            submittedAt: questionnaireData.createdAt || new Date().toISOString(),
-            ignitionClientLink: job?.ignition?.client_URL || '',
-          });
+            // best-effort, don't await in the main response chain
+            void sendEnterpriseEmails(questionnaireData, {
+                submittedAt: questionnaireData.createdAt || new Date().toISOString(),
+                ignitionClientLink: job?.ignition?.client_URL || '',
+            });
         }
 
         // Return success response
         return res.status(200).json({
-          success: true,
-          message: 'Client creation request sent to Ignition via Zapier',
-          data: {
-            zapierCalled: true,
-            zapierResponse: zapierResponse,
-            formattedData: zapierData,
-          },
+            success: true,
+            message: 'Client creation request sent to Ignition via Zapier',
+            data: {
+                zapierCalled: true,
+                zapierResponse: zapierResponse,
+                formattedData: zapierData,
+            },
         });
 
     } catch (error) {
@@ -347,6 +347,363 @@ const createClientInIgnition = async (req, res) => {
         });
     }
 };
+
+const sendToPandaDoc = async (req, res) => {
+    let documentId = null;
+    let dbRecord = null;
+
+    try {
+        const {
+            document_name,
+            client_first_name,
+            client_last_name,
+            client_email,
+            client_company = "",
+            start_date = "",
+        } = req.body;
+
+        // 1️⃣ Comprehensive validation
+        const missingFields = [];
+        if (!document_name) missingFields.push("document_name");
+        if (!client_first_name) missingFields.push("client_first_name");
+        // if (!client_last_name) missingFields.push("client_last_name");
+        if (!client_email) missingFields.push("client_email");
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing required fields",
+                missing_fields: missingFields,
+            });
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(client_email)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid email format",
+            });
+        }
+
+        const {
+            PANDADOC_API_KEY,
+            PANDADOC_STARTUP_PLAN_TEMPLATE_ID,
+            PANDADOC_ESSENTIAL_PLAN_TEMPLATE_ID,
+        } = process.env;
+
+        if (
+            !PANDADOC_API_KEY ||
+            !PANDADOC_STARTUP_PLAN_TEMPLATE_ID ||
+            !PANDADOC_ESSENTIAL_PLAN_TEMPLATE_ID
+        ) {
+            console.error("❌ Missing PandaDoc environment variables");
+            return res.status(500).json({
+                success: false,
+                message: "Server configuration error",
+            });
+        }
+
+        const BASE_URL = "https://api.pandadoc.com/public/v1";
+
+        // 2️⃣ ATOMIC idempotency check with upsert + unique index
+        // This is the critical fix - uses MongoDB's atomic operations
+        try {
+            dbRecord = await EngagementLetter.findOneAndUpdate(
+                {
+                    email: client_email,
+                    status: { $in: ["CREATED", "SENT", "PROCESSING"] },
+                },
+                {}, // No updates if found
+                {
+                    new: true,
+                    upsert: false, // Don't create if not found
+                }
+            );
+
+            // If found, return existing
+            if (dbRecord) {
+                return res.status(409).json({
+                    success: false,
+                    message: "Engagement letter already exists for this email",
+                    data: {
+                        document_id: dbRecord.documentId,
+                        status: dbRecord.status,
+                        created_at: dbRecord.createdAt,
+                    },
+                });
+            }
+
+            // ATOMIC CREATE - this is where we prevent race conditions
+            dbRecord = await EngagementLetter.create({
+                email: client_email,
+                documentId: null,
+                status: "PROCESSING",
+                document_name,
+                client_name: `${client_first_name} ${client_last_name}`,
+                createdAt: new Date(),
+            });
+
+        } catch (dbError) {
+            // MongoDB duplicate key error (11000)
+            if (dbError.code === 11000) {
+                // Another request just created a record for this email
+                const existing = await EngagementLetter.findOne({ email: client_email });
+                return res.status(409).json({
+                    success: false,
+                    message: "Engagement letter creation already in progress",
+                    data: {
+                        document_id: existing?.documentId,
+                        status: existing?.status,
+                    },
+                });
+            }
+            throw dbError; // Re-throw other DB errors
+        }
+
+        // 3️⃣ Choose template
+        const isStartupPlan = document_name.toLowerCase().includes("startup");
+        const templateId = isStartupPlan
+            ? PANDADOC_STARTUP_PLAN_TEMPLATE_ID
+            : PANDADOC_ESSENTIAL_PLAN_TEMPLATE_ID;
+
+        // 4️⃣ Create PandaDoc document
+        const createResponse = await axios.post(
+            `${BASE_URL}/documents`,
+            {
+                name: document_name,
+                template_uuid: templateId,
+                recipients: [
+                    {
+                        email: client_email,
+                        first_name: client_first_name,
+                        last_name: client_last_name,
+                        role: "Client",
+                    },
+                ],
+                tokens: [
+                    { name: "Client.FirstName", value: client_first_name },
+                    { name: "Client.LastName", value: client_last_name },
+                    { name: "Client.Company", value: client_company },
+                    { name: "StartDate", value: start_date },
+                ],
+                metadata: {
+                    engagement_letter: true,
+                    created_via: "api",
+                    timestamp: new Date().toISOString(),
+                },
+            },
+            {
+                headers: {
+                    Authorization: `API-Key ${PANDADOC_API_KEY}`,
+                    "Content-Type": "application/json",
+                },
+                timeout: 30000,
+            }
+        );
+
+        documentId = createResponse.data.id;
+
+        // 5️⃣ Update DB with document ID
+        await EngagementLetter.updateOne(
+            { _id: dbRecord._id },
+            {
+                documentId,
+                status: "CREATED",
+                pandadocCreatedAt: new Date(),
+            }
+        );
+
+        // 6️⃣ Wait for document to be ready
+        await waitForDocumentReady(documentId, PANDADOC_API_KEY, BASE_URL);
+
+        // 7️⃣ Send document
+        try {
+            await axios.post(
+                `${BASE_URL}/documents/${documentId}/send`,
+                {
+                    silent: false,
+                    subject: `Engagement Letter - ${document_name}`,
+                },
+                {
+                    headers: {
+                        Authorization: `API-Key ${PANDADOC_API_KEY}`,
+                        "Content-Type": "application/json",
+                    },
+                    timeout: 30000,
+                }
+            );
+
+            // 8️⃣ Update final status
+            await EngagementLetter.updateOne(
+                { _id: dbRecord._id },
+                {
+                    status: "SENT",
+                    sentAt: new Date(),
+                }
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Engagement letter created and sent successfully",
+                data: {
+                    document_id: documentId,
+                    recipient: client_email,
+                },
+            });
+
+        } catch (sendError) {
+            // Send failed, but document was created
+            await EngagementLetter.updateOne(
+                { _id: dbRecord._id },
+                {
+                    status: "CREATED_NOT_SENT",
+                    error: sendError.response?.data?.detail || sendError.message,
+                }
+            );
+
+            console.error("❌ Failed to send document:", sendError.response?.data || sendError.message);
+
+            return res.status(500).json({
+                success: false,
+                message: "Document created but failed to send",
+                data: {
+                    document_id: documentId,
+                    error: "Please try resending from PandaDoc dashboard",
+                },
+            });
+        }
+
+    } catch (error) {
+        console.error("❌ PandaDoc Error:", error.response?.data || error.message);
+
+        // Update DB record with failure status if it exists
+        if (dbRecord) {
+            await EngagementLetter.updateOne(
+                { _id: dbRecord._id },
+                {
+                    status: "FAILED",
+                    error: error.response?.data?.detail || error.message,
+                    failedAt: new Date(),
+                }
+            ).catch(dbError => {
+                console.error("❌ Failed to update DB error status:", dbError);
+            });
+        }
+
+        const statusCode = error.response?.status || 500;
+        const isClientError = statusCode >= 400 && statusCode < 500;
+
+        return res.status(statusCode).json({
+            success: false,
+            message: isClientError
+                ? "Invalid request to PandaDoc"
+                : "Failed to create engagement letter",
+            error: process.env.NODE_ENV === "development"
+                ? error.response?.data || error.message
+                : undefined,
+        });
+    }
+};
+
+// 🔄 Helper: Wait for document to be ready
+const waitForDocumentReady = async (documentId, apiKey, baseUrl, maxAttempts = 15) => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const { data } = await axios.get(
+                `${baseUrl}/documents/${documentId}`,
+                {
+                    headers: { Authorization: `API-Key ${apiKey}` },
+                    timeout: 10000,
+                }
+            );
+
+            if (data.status === "document.draft") {
+                return true;
+            }
+
+            if (data.status === "document.error") {
+                throw new Error(`PandaDoc document error: ${data.error_message || "Unknown error"}`);
+            }
+
+            // Exponential backoff
+            const delay = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+        } catch (error) {
+            if (attempt === maxAttempts) {
+                throw new Error(`Document not ready after ${maxAttempts} attempts: ${error.message}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
+
+    throw new Error("Document polling timeout");
+};
+
+
+
+const pandadocWebhookHandler = async (req, res) => {
+    try {
+        // PandaDoc sends an array of events
+        const events = Array.isArray(req.body) ? req.body : [req.body];
+
+        for (const evt of events) {
+            const eventType = evt.event;
+            const data = evt.data;
+
+            const documentId = data?.id;
+            if (!documentId) continue;
+
+            // ✅ Strongest signal: signer completed
+            if (eventType === "recipient_completed") {
+                // 1️⃣ Update EngagementLetter
+                const letter = await EngagementLetter.findOneAndUpdate(
+                    { documentId },
+                    {
+                        status: "SIGNED",
+                        signedAt: new Date(data?.action_date || Date.now()),
+                        document_url:data.recipients[0].shared_link
+                    },
+                    { new: true }
+                );
+                
+                await QuestionnaireResponse.findOneAndUpdate({email: letter.email},{
+                    status: "signed",
+                    expiresAt:null
+                })
+
+
+                if (!letter) {
+                    console.warn("⚠️ EngagementLetter not found for:", documentId);
+                    continue;
+                }
+
+                // 2️⃣ Directly update questionnaire / onboarding logic
+                await handleIgnitionProposalStatus({
+                    email: letter.email,
+                    proposal_status: "accepted",
+                    proposal_id: documentId,
+                    paid_at: data?.action_date,
+                });
+
+                console.log("✅ Engagement letter SIGNED & processed:", documentId);
+            }
+        }
+
+        // PandaDoc requires 200 OK
+        return res.status(200).send("OK");
+
+    } catch (error) {
+        console.error("❌ PandaDoc webhook error:", error);
+        return res.status(500).send("Webhook error");
+    }
+};
+
+
+
+
+
 
 /**
  * Test Zapier webhook endpoint (for development)
@@ -413,6 +770,7 @@ const zapierStatusCallback = async (req, res) => {
             error,
             errorStep,
             client_URL,
+            pandaDoc_URL,
             run_id,
         } = req.body;
         console.log("Zapier Callback Received:", req.body);
@@ -450,57 +808,58 @@ const zapierStatusCallback = async (req, res) => {
  * - Send welcome email with generated password
  */
 async function onboardClientFromQuestionnaire(questionnaire) {
-  if (!questionnaire || !questionnaire.email) {
-    return null;
-  }
+    console.log('Starting onboarding for questionnaire:', questionnaire._id);
+    if (!questionnaire || !questionnaire.email) {
+        return null;
+    }
 
-  const email = questionnaire.email.toLowerCase();
+    const email = questionnaire.email.toLowerCase();
 
-  // If already linked to a user and marked onboarded, do nothing
-  if (questionnaire.userId && questionnaire.status === 'onboarded') {
-    return { userId: questionnaire.userId, alreadyOnboarded: true };
-  }
+    // If already linked to a user and marked onboarded, do nothing
+    if (questionnaire.userId && questionnaire.status === 'onboarded') {
+        return { userId: questionnaire.userId, alreadyOnboarded: true };
+    }
 
-  // Try to find existing user by email
-  let user = await User.findOne({ email });
+    // Try to find existing user by email
+    let user = await User.findOne({ email });
 
-  let plainPassword = null;
+    let plainPassword = null;
 
-  if (!user) {
-    // Derive first/last name from questionnaire.name (best-effort)
-    const fullName = questionnaire.name || '';
-    const nameParts = fullName.trim().split(' ').filter(Boolean);
-    const first_name = nameParts[0] || '';
-    const last_name = nameParts.slice(1).join(' ') || '';
+    if (!user) {
+        // Derive first/last name from questionnaire.name (best-effort)
+        const fullName = questionnaire.name || '';
+        const nameParts = fullName.trim().split(' ').filter(Boolean);
+        const first_name = nameParts[0] || '';
+        const last_name = nameParts.slice(1).join(' ') || '';
 
-    // Generate a secure random password
-    plainPassword = crypto.randomBytes(10).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
-    const passwordHash = await bcryptService.generatePassword(plainPassword);
+        // Generate a secure random password
+        plainPassword = crypto.randomBytes(10).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+        const passwordHash = await bcryptService.generatePassword(plainPassword);
 
-    user = await User.create({
-      email,
-      password: passwordHash,
-      first_name,
-      last_name,
-      role_id: '3', // Client
-      active: true,
-    });
-  }
+        user = await User.create({
+            email,
+            password: passwordHash,
+            first_name,
+            last_name,
+            role_id: '3', // Client
+            active: true,
+        });
+    }
 
-  // Link questionnaire to user and mark as onboarded
-  questionnaire.userId = user._id;
-  questionnaire.status = 'onboarded';
-  await questionnaire.save();
+    // Link questionnaire to user and mark as onboarded
+    questionnaire.userId = user._id;
+    questionnaire.status = 'onboarded';
+    await questionnaire.save();
 
-  // Send welcome email with credentials
-  try {
-    const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:4000';
-    const supportEmail =
-      process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || user.email;
+    // Send welcome email with credentials
+    try {
+        const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
+        const loginUrl = process.env.FRONTEND_URL || 'http://localhost:4000';
+        const supportEmail =
+            process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || user.email;
 
-    const subject = `Your ${companyName} account is ready`;
-    const html = `
+        const subject = `Your ${companyName} account is ready`;
+        const html = `
       <p>Hi ${user.first_name || questionnaire.name || ''},</p>
       <p>Your client account with <strong>${companyName}</strong> has been created.</p>
       <p>You can log in using the following credentials:</p>
@@ -514,7 +873,7 @@ async function onboardClientFromQuestionnaire(questionnaire) {
       <p>Best regards,<br/>The ${companyName} Team</p>
     `;
 
-    const text = `
+        const text = `
 Hi ${user.first_name || questionnaire.name || ''},
 
 Your client account with ${companyName} has been created.
@@ -532,21 +891,21 @@ Best regards,
 The ${companyName} Team
     `.trim();
 
-    await emailService.sendEmail({
-      to: user.email,
-      subject,
-      html,
-      text,
-    });
-  } catch (err) {
-    console.error('Error sending onboarding welcome email:', err);
-    // Non-fatal: user is still created and linked
-  }
+        await emailService.sendEmail({
+            to: user.email,
+            subject,
+            html,
+            text,
+        });
+    } catch (err) {
+        console.error('Error sending onboarding welcome email:', err);
+        // Non-fatal: user is still created and linked
+    }
 
-  return {
-    userId: user._id,
-    email: user.email,
-  };
+    return {
+        userId: user._id,
+        email: user.email,
+    };
 }
 
 /**
@@ -566,113 +925,166 @@ The ${companyName} Team
  * }
  */
 const ignitionProposalStatusCallback = async (req, res) => {
-  try {
-    const {
-      email,
-      proposal_status,
-      payment_status,
-      proposal_id,
-      paid_at,
-    } = req.body || {};
+    try {
+        const {
+            email,
+            proposal_status,
+            payment_status,
+            proposal_id,
+            paid_at,
+        } = req.body || {};
 
-    console.log('Ignition proposal status callback received:', req.body);
+        console.log('Ignition proposal status callback received:', req.body);
 
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required field: email',
+            });
+        }
+
+        // Find the most recent questionnaire for this email
+        const questionnaire = await QuestionnaireResponse.findOne({ email })
+            .sort({ createdAt: -1 })
+            .exec();
+
+        if (!questionnaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Questionnaire response not found for provided email',
+            });
+        }
+
+        // Update questionnaire status & metadata based on Ignition/Zap payload
+        // For now we simply mark as "signed" or "onboarded" depending on payment_status.
+        const updates = {};
+
+        if (proposal_id) {
+            updates['metadata.ignitionClientId'] = proposal_id;
+        }
+
+        // If payment is confirmed, set paidAt and move towards onboarded
+        // const isPaid =
+        //     typeof payment_status === 'string' &&
+        //     ['paid', 'completed', 'succeeded'].includes(payment_status.toLowerCase());
+        const isPaid = true
+
+        if (isPaid) {
+            updates.paidAt = paid_at ? new Date(paid_at) : new Date();
+
+            // Only bump status forward, don't regress
+            if (questionnaire.status === 'pending' || questionnaire.status === 'proposal_sent') {
+                updates.status = 'signed';
+            }
+        } else if (proposal_status && questionnaire.status === 'pending') {
+            // If only proposal is accepted but we don't have payment yet,
+            // we can still move from pending -> signed.
+            const lower = proposal_status.toLowerCase();
+            if (['accepted', 'active', 'signed'].includes(lower)) {
+                updates.status = 'signed';
+            }
+        }
+
+        if (Object.keys(updates).length === 0) {
+            // Nothing to update; still return OK for Zapier
+            return res.status(200).json({
+                success: true,
+                message: 'No status change required for questionnaire',
+            });
+        }
+
+        const updated = await QuestionnaireResponse.findByIdAndUpdate(
+            questionnaire._id,
+            { $set: updates },
+            { new: true }
+        );
+
+        // If payment is confirmed, attempt onboarding (create User + link questionnaire)
+        let onboardingResult = null;
+        if (
+            isPaid &&
+            (!updated.userId || updated.status !== 'onboarded')
+        ) {
+            try {
+                onboardingResult = await onboardClientFromQuestionnaire(updated);
+            } catch (onboardErr) {
+                console.error('Error during onboarding from Ignition status:', onboardErr);
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Questionnaire updated from Ignition status',
+            data: {
+                id: updated._id,
+                email: updated.email,
+                status: updated.status,
+                paidAt: updated.paidAt,
+                metadata: updated.metadata,
+                onboarding: onboardingResult,
+            },
+        });
+    } catch (err) {
+        console.error('Error handling Ignition proposal status callback:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: err.message || 'An unexpected error occurred',
+        });
+    }
+};
+
+
+const handleIgnitionProposalStatus = async ({
+    email,
+    proposal_status,
+    payment_status,
+    proposal_id,
+    paid_at,
+}) => {
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: email',
-      });
+        throw new Error("Email is required");
     }
 
-    // Find the most recent questionnaire for this email
     const questionnaire = await QuestionnaireResponse.findOne({ email })
-      .sort({ createdAt: -1 })
-      .exec();
+        .sort({ createdAt: -1 });
 
     if (!questionnaire) {
-      return res.status(404).json({
-        success: false,
-        message: 'Questionnaire response not found for provided email',
-      });
+        throw new Error("Questionnaire response not found");
     }
 
-    // Update questionnaire status & metadata based on Ignition/Zap payload
-    // For now we simply mark as "signed" or "onboarded" depending on payment_status.
     const updates = {};
 
     if (proposal_id) {
-      updates['metadata.ignitionClientId'] = proposal_id;
+        updates["metadata.ignitionClientId"] = proposal_id;
     }
 
-    // If payment is confirmed, set paidAt and move towards onboarded
-    const isPaid =
-      typeof payment_status === 'string' &&
-      ['paid', 'completed', 'succeeded'].includes(payment_status.toLowerCase());
+    // 🔥 PandaDoc SIGN = proposal accepted
+    const isSigned = true;
 
-    if (isPaid) {
-      updates.paidAt = paid_at ? new Date(paid_at) : new Date();
-
-      // Only bump status forward, don't regress
-      if (questionnaire.status === 'pending' || questionnaire.status === 'proposal_sent') {
-        updates.status = 'signed';
-      }
-    } else if (proposal_status && questionnaire.status === 'pending') {
-      // If only proposal is accepted but we don't have payment yet,
-      // we can still move from pending -> signed.
-      const lower = proposal_status.toLowerCase();
-      if (['accepted', 'active', 'signed'].includes(lower)) {
-        updates.status = 'signed';
-      }
-    }
-
-    if (Object.keys(updates).length === 0) {
-      // Nothing to update; still return OK for Zapier
-      return res.status(200).json({
-        success: true,
-        message: 'No status change required for questionnaire',
-      });
+    if (isSigned) {
+        updates.status = "signed";
     }
 
     const updated = await QuestionnaireResponse.findByIdAndUpdate(
-      questionnaire._id,
-      { $set: updates },
-      { new: true }
+        questionnaire._id,
+        { $set: updates },
+        { new: true }
     );
+    console.log("Updated questionnaire from Ignition status:", updated._id);
 
-    // If payment is confirmed, attempt onboarding (create User + link questionnaire)
-    let onboardingResult = null;
-    if (
-      isPaid &&
-      (!updated.userId || updated.status !== 'onboarded')
-    ) {
-      try {
-        onboardingResult = await onboardClientFromQuestionnaire(updated);
-      } catch (onboardErr) {
-        console.error('Error during onboarding from Ignition status:', onboardErr);
-      }
+    // Optional onboarding trigger
+    if (!updated.userId || updated.status !== 'onboarded') {
+        try {
+            await onboardClientFromQuestionnaire(updated);
+        } catch (err) {
+            console.error("Onboarding failed:", err.message);
+        }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Questionnaire updated from Ignition status',
-      data: {
-        id: updated._id,
-        email: updated.email,
-        status: updated.status,
-        paidAt: updated.paidAt,
-        metadata: updated.metadata,
-        onboarding: onboardingResult,
-      },
-    });
-  } catch (err) {
-    console.error('Error handling Ignition proposal status callback:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: err.message || 'An unexpected error occurred',
-    });
-  }
+    return updated;
 };
+
 
 module.exports = {
     createClientInIgnition,
@@ -680,4 +1092,6 @@ module.exports = {
     formatDataForZapier, // Export for testing,
     zapierStatusCallback,
     ignitionProposalStatusCallback,
+    sendToPandaDoc,
+    pandadocWebhookHandler
 };
