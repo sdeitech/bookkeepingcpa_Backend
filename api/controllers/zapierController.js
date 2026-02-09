@@ -58,31 +58,31 @@ const formatDataForZapier = (questionnaireData) => {
  * @param {Object} options - { ignitionClientLink, submittedAt }
  */
 async function sendEnterpriseEmails(questionnaireData, options = {}) {
-  try {
-    const { email, name, answers, recommendedPlan } = questionnaireData;
-    if (!email || !name || recommendedPlan !== 'enterprise') {
-      return;
-    }
+    try {
+        const { email, name, answers, recommendedPlan } = questionnaireData;
+        if (!email || !name || recommendedPlan !== 'enterprise') {
+            return;
+        }
 
-    const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
-    const supportEmail = process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
-    const submittedAt = options.submittedAt || new Date().toISOString();
-    const ignitionClientLink = options.ignitionClientLink || '';
+        const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
+        const supportEmail = process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+        const submittedAt = options.submittedAt || new Date().toISOString();
+        const ignitionClientLink = options.ignitionClientLink || '';
 
-    // Map raw codes to something slightly more readable (best‑effort, safe for demo)
-    const codeOr = (val, fallback) => val || fallback;
-    const revenue = codeOr(answers?.q1Revenue, 'N/A');
-    const supportLevel = codeOr(answers?.q2Support, 'N/A');
-    const customization = codeOr(answers?.q3Customization, 'N/A');
-    const businessStructure = codeOr(answers?.q4Structure, 'N/A');
-    const cleanup = codeOr(answers?.q5Cleanup, 'N/A');
-    const tax = codeOr(answers?.q6Tax, 'N/A');
+        // Map raw codes to something slightly more readable (best‑effort, safe for demo)
+        const codeOr = (val, fallback) => val || fallback;
+        const revenue = codeOr(answers?.q1Revenue, 'N/A');
+        const supportLevel = codeOr(answers?.q2Support, 'N/A');
+        const customization = codeOr(answers?.q3Customization, 'N/A');
+        const businessStructure = codeOr(answers?.q4Structure, 'N/A');
+        const cleanup = codeOr(answers?.q5Cleanup, 'N/A');
+        const tax = codeOr(answers?.q6Tax, 'N/A');
 
-    const planName = 'Enterprise';
+        const planName = 'Enterprise';
 
-    // --- User confirmation email (simple HTML/text for now) ---
-    const userSubject = `Your ${planName} consultation request with ${companyName}`;
-    const userHtml = `
+        // --- User confirmation email (simple HTML/text for now) ---
+        const userSubject = `Your ${planName} consultation request with ${companyName}`;
+        const userHtml = `
       <p>Hi ${name},</p>
       <p>Thank you for requesting an <strong>${planName}</strong> consultation with <strong>${companyName}</strong>.</p>
       <p>We’ve received your details and our team will review your information before the call.</p>
@@ -90,7 +90,7 @@ async function sendEnterpriseEmails(questionnaireData, options = {}) {
       <p>If you have any questions before the call, you can reply to this email or contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
       <p>Best regards,<br/>The ${companyName} Team</p>
     `;
-    const userText = `
+        const userText = `
 Hi ${name},
 
 Thank you for requesting an ${planName} consultation with ${companyName}.
@@ -105,18 +105,18 @@ Best regards,
 The ${companyName} Team
     `.trim();
 
-    await emailService.sendEmail({
-      to: email,
-      subject: userSubject,
-      html: userHtml,
-      text: userText,
-    });
+        await emailService.sendEmail({
+            to: email,
+            subject: userSubject,
+            html: userHtml,
+            text: userText,
+        });
 
-    // --- Admin notification email ---
-    const adminTo =
-      process.env.ADMIN_EMAIL || supportEmail || process.env.SMTP_USER;
-    const adminSubject = `New Enterprise consultation request - ${name}`;
-    const adminHtml = `
+        // --- Admin notification email ---
+        const adminTo =
+            process.env.ADMIN_EMAIL || supportEmail || process.env.SMTP_USER;
+        const adminSubject = `New Enterprise consultation request - ${name}`;
+        const adminHtml = `
       <p><strong>New Enterprise consultation request received.</strong></p>
       <p><strong>Client:</strong> ${name} &lt;${email}&gt;</p>
       <p><strong>Plan:</strong> ${planName}</p>
@@ -130,14 +130,13 @@ The ${companyName} Team
         <li>Cleanup Required: ${cleanup}</li>
         <li>Tax Assistance: ${tax}</li>
       </ul>
-      ${
-        ignitionClientLink
-          ? `<p><strong>Ignition client record:</strong> <a href="${ignitionClientLink}" target="_blank" rel="noopener noreferrer">${ignitionClientLink}</a></p>`
-          : ''
-      }
+      ${ignitionClientLink
+                ? `<p><strong>Ignition client record:</strong> <a href="${ignitionClientLink}" target="_blank" rel="noopener noreferrer">${ignitionClientLink}</a></p>`
+                : ''
+            }
       <p>Please review the client’s details and follow up from Ignition.</p>
     `;
-    const adminText = `
+        const adminText = `
 New Enterprise consultation request received.
 
 Client: ${name} <${email}>
@@ -156,15 +155,15 @@ ${ignitionClientLink ? `Ignition client record: ${ignitionClientLink}` : ''}
 Please review the client’s details and follow up from Ignition.
     `.trim();
 
-    await emailService.sendEmail({
-      to: adminTo,
-      subject: adminSubject,
-      html: adminHtml,
-      text: adminText,
-    });
-  } catch (err) {
-    console.error('Error sending Enterprise consultation emails:', err);
-  }
+        await emailService.sendEmail({
+            to: adminTo,
+            subject: adminSubject,
+            html: adminHtml,
+            text: adminText,
+        });
+    } catch (err) {
+        console.error('Error sending Enterprise consultation emails:', err);
+    }
 }
 
 /**
@@ -181,6 +180,7 @@ Please review the client’s details and follow up from Ignition.
 const createClientInIgnition = async (req, res) => {
     try {
         const { questionnaireId, email, name, answers, recommendedPlan } = req.body;
+        console.log("Create Client Request Body:", req.body);
         const requestId = crypto.randomUUID();
         const user = await ZapierJob.findOne({
             "payload.Contact Email": email,
@@ -249,17 +249,16 @@ const createClientInIgnition = async (req, res) => {
             });
         }
 
-    // Format data for Zapier
+        // Format data for Zapier
         const formatedData = formatDataForZapier(questionnaireData);
         const zapierData = {
-          ...formatedData,
-          requestId,
-          status: 'PENDING',
+            ...formatedData,
+            requestId,
         };
         const job = await ZapierJob.create({
-          requestId,
-          payload: zapierData,
-          status: 'PENDING',
+            requestId,
+            payload: zapierData,
+            status: 'PENDING',
         });
 
         // Call Zapier webhook
@@ -320,22 +319,22 @@ const createClientInIgnition = async (req, res) => {
 
         // Fire-and-forget emails for Enterprise consultations
         if (questionnaireData.recommendedPlan === 'enterprise') {
-          // best-effort, don't await in the main response chain
-          void sendEnterpriseEmails(questionnaireData, {
-            submittedAt: questionnaireData.createdAt || new Date().toISOString(),
-            ignitionClientLink: job?.ignition?.client_URL || '',
-          });
+            // best-effort, don't await in the main response chain
+            void sendEnterpriseEmails(questionnaireData, {
+                submittedAt: questionnaireData.createdAt || new Date().toISOString(),
+                ignitionClientLink: job?.ignition?.client_URL || '',
+            });
         }
 
         // Return success response
         return res.status(200).json({
-          success: true,
-          message: 'Client creation request sent to Ignition via Zapier',
-          data: {
-            zapierCalled: true,
-            zapierResponse: zapierResponse,
-            formattedData: zapierData,
-          },
+            success: true,
+            message: 'Client creation request sent to Ignition via Zapier',
+            data: {
+                zapierCalled: true,
+                zapierResponse: zapierResponse,
+                formattedData: zapierData,
+            },
         });
 
     } catch (error) {
@@ -450,57 +449,57 @@ const zapierStatusCallback = async (req, res) => {
  * - Send welcome email with generated password
  */
 async function onboardClientFromQuestionnaire(questionnaire) {
-  if (!questionnaire || !questionnaire.email) {
-    return null;
-  }
+    if (!questionnaire || !questionnaire.email) {
+        return null;
+    }
 
-  const email = questionnaire.email.toLowerCase();
+    const email = questionnaire.email.toLowerCase();
 
-  // If already linked to a user and marked onboarded, do nothing
-  if (questionnaire.userId && questionnaire.status === 'onboarded') {
-    return { userId: questionnaire.userId, alreadyOnboarded: true };
-  }
+    // If already linked to a user and marked onboarded, do nothing
+    if (questionnaire.userId && questionnaire.status === 'onboarded') {
+        return { userId: questionnaire.userId, alreadyOnboarded: true };
+    }
 
-  // Try to find existing user by email
-  let user = await User.findOne({ email });
+    // Try to find existing user by email
+    let user = await User.findOne({ email });
 
-  let plainPassword = null;
+    let plainPassword = null;
 
-  if (!user) {
-    // Derive first/last name from questionnaire.name (best-effort)
-    const fullName = questionnaire.name || '';
-    const nameParts = fullName.trim().split(' ').filter(Boolean);
-    const first_name = nameParts[0] || '';
-    const last_name = nameParts.slice(1).join(' ') || '';
+    if (!user) {
+        // Derive first/last name from questionnaire.name (best-effort)
+        const fullName = questionnaire.name || '';
+        const nameParts = fullName.trim().split(' ').filter(Boolean);
+        const first_name = nameParts[0] || '';
+        const last_name = nameParts.slice(1).join(' ') || '';
 
-    // Generate a secure random password
-    plainPassword = crypto.randomBytes(10).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
-    const passwordHash = await bcryptService.generatePassword(plainPassword);
+        // Generate a secure random password
+        plainPassword = crypto.randomBytes(10).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+        const passwordHash = await bcryptService.generatePassword(plainPassword);
 
-    user = await User.create({
-      email,
-      password: passwordHash,
-      first_name,
-      last_name,
-      role_id: '3', // Client
-      active: true,
-    });
-  }
+        user = await User.create({
+            email,
+            password: passwordHash,
+            first_name,
+            last_name,
+            role_id: '3', // Client
+            active: true,
+        });
+    }
 
-  // Link questionnaire to user and mark as onboarded
-  questionnaire.userId = user._id;
-  questionnaire.status = 'onboarded';
-  await questionnaire.save();
+    // Link questionnaire to user and mark as onboarded
+    questionnaire.userId = user._id;
+    questionnaire.status = 'onboarded';
+    await questionnaire.save();
 
-  // Send welcome email with credentials
-  try {
-    const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:4000';
-    const supportEmail =
-      process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || user.email;
+    // Send welcome email with credentials
+    try {
+        const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
+        const loginUrl = process.env.FRONTEND_URL || 'http://localhost:4000';
+        const supportEmail =
+            process.env.SUPPORT_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || user.email;
 
-    const subject = `Your ${companyName} account is ready`;
-    const html = `
+        const subject = `Your ${companyName} account is ready`;
+        const html = `
       <p>Hi ${user.first_name || questionnaire.name || ''},</p>
       <p>Your client account with <strong>${companyName}</strong> has been created.</p>
       <p>You can log in using the following credentials:</p>
@@ -514,7 +513,7 @@ async function onboardClientFromQuestionnaire(questionnaire) {
       <p>Best regards,<br/>The ${companyName} Team</p>
     `;
 
-    const text = `
+        const text = `
 Hi ${user.first_name || questionnaire.name || ''},
 
 Your client account with ${companyName} has been created.
@@ -532,21 +531,21 @@ Best regards,
 The ${companyName} Team
     `.trim();
 
-    await emailService.sendEmail({
-      to: user.email,
-      subject,
-      html,
-      text,
-    });
-  } catch (err) {
-    console.error('Error sending onboarding welcome email:', err);
-    // Non-fatal: user is still created and linked
-  }
+        await emailService.sendEmail({
+            to: user.email,
+            subject,
+            html,
+            text,
+        });
+    } catch (err) {
+        console.error('Error sending onboarding welcome email:', err);
+        // Non-fatal: user is still created and linked
+    }
 
-  return {
-    userId: user._id,
-    email: user.email,
-  };
+    return {
+        userId: user._id,
+        email: user.email,
+    };
 }
 
 /**
@@ -566,112 +565,112 @@ The ${companyName} Team
  * }
  */
 const ignitionProposalStatusCallback = async (req, res) => {
-  try {
-    const {
-      email,
-      proposal_status,
-      payment_status,
-      proposal_id,
-      paid_at,
-    } = req.body || {};
+    try {
+        const {
+            email,
+            proposal_status,
+            payment_status,
+            proposal_id,
+            paid_at,
+        } = req.body || {};
 
-    console.log('Ignition proposal status callback received:', req.body);
+        console.log('Ignition proposal status callback received:', req.body);
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: email',
-      });
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required field: email',
+            });
+        }
+
+        // Find the most recent questionnaire for this email
+        const questionnaire = await QuestionnaireResponse.findOne({ email })
+            .sort({ createdAt: -1 })
+            .exec();
+
+        if (!questionnaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Questionnaire response not found for provided email',
+            });
+        }
+
+        // Update questionnaire status & metadata based on Ignition/Zap payload
+        // For now we simply mark as "signed" or "onboarded" depending on payment_status.
+        const updates = {};
+
+        if (proposal_id) {
+            updates['metadata.ignitionClientId'] = proposal_id;
+        }
+
+        // If payment is confirmed, set paidAt and move towards onboarded
+        const isPaid =
+            typeof payment_status === 'string' &&
+            ['paid', 'completed', 'succeeded'].includes(payment_status.toLowerCase());
+
+        if (isPaid) {
+            updates.paidAt = paid_at ? new Date(paid_at) : new Date();
+
+            // Only bump status forward, don't regress
+            if (questionnaire.status === 'pending' || questionnaire.status === 'proposal_sent') {
+                updates.status = 'signed';
+            }
+        } else if (proposal_status && questionnaire.status === 'pending') {
+            // If only proposal is accepted but we don't have payment yet,
+            // we can still move from pending -> signed.
+            const lower = proposal_status.toLowerCase();
+            if (['accepted', 'active', 'signed'].includes(lower)) {
+                updates.status = 'signed';
+            }
+        }
+
+        if (Object.keys(updates).length === 0) {
+            // Nothing to update; still return OK for Zapier
+            return res.status(200).json({
+                success: true,
+                message: 'No status change required for questionnaire',
+            });
+        }
+
+        const updated = await QuestionnaireResponse.findByIdAndUpdate(
+            questionnaire._id,
+            { $set: updates },
+            { new: true }
+        );
+
+        // If payment is confirmed, attempt onboarding (create User + link questionnaire)
+        let onboardingResult = null;
+        if (
+            isPaid &&
+            (!updated.userId || updated.status !== 'onboarded')
+        ) {
+            try {
+                onboardingResult = await onboardClientFromQuestionnaire(updated);
+            } catch (onboardErr) {
+                console.error('Error during onboarding from Ignition status:', onboardErr);
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Questionnaire updated from Ignition status',
+            data: {
+                id: updated._id,
+                email: updated.email,
+                status: updated.status,
+                paidAt: updated.paidAt,
+                metadata: updated.metadata,
+                onboarding: onboardingResult,
+            },
+        });
+    } catch (err) {
+        console.error('Error handling Ignition proposal status callback:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: err.message || 'An unexpected error occurred',
+        });
     }
-
-    // Find the most recent questionnaire for this email
-    const questionnaire = await QuestionnaireResponse.findOne({ email })
-      .sort({ createdAt: -1 })
-      .exec();
-
-    if (!questionnaire) {
-      return res.status(404).json({
-        success: false,
-        message: 'Questionnaire response not found for provided email',
-      });
-    }
-
-    // Update questionnaire status & metadata based on Ignition/Zap payload
-    // For now we simply mark as "signed" or "onboarded" depending on payment_status.
-    const updates = {};
-
-    if (proposal_id) {
-      updates['metadata.ignitionClientId'] = proposal_id;
-    }
-
-    // If payment is confirmed, set paidAt and move towards onboarded
-    const isPaid =
-      typeof payment_status === 'string' &&
-      ['paid', 'completed', 'succeeded'].includes(payment_status.toLowerCase());
-
-    if (isPaid) {
-      updates.paidAt = paid_at ? new Date(paid_at) : new Date();
-
-      // Only bump status forward, don't regress
-      if (questionnaire.status === 'pending' || questionnaire.status === 'proposal_sent') {
-        updates.status = 'signed';
-      }
-    } else if (proposal_status && questionnaire.status === 'pending') {
-      // If only proposal is accepted but we don't have payment yet,
-      // we can still move from pending -> signed.
-      const lower = proposal_status.toLowerCase();
-      if (['accepted', 'active', 'signed'].includes(lower)) {
-        updates.status = 'signed';
-      }
-    }
-
-    if (Object.keys(updates).length === 0) {
-      // Nothing to update; still return OK for Zapier
-      return res.status(200).json({
-        success: true,
-        message: 'No status change required for questionnaire',
-      });
-    }
-
-    const updated = await QuestionnaireResponse.findByIdAndUpdate(
-      questionnaire._id,
-      { $set: updates },
-      { new: true }
-    );
-
-    // If payment is confirmed, attempt onboarding (create User + link questionnaire)
-    let onboardingResult = null;
-    if (
-      isPaid &&
-      (!updated.userId || updated.status !== 'onboarded')
-    ) {
-      try {
-        onboardingResult = await onboardClientFromQuestionnaire(updated);
-      } catch (onboardErr) {
-        console.error('Error during onboarding from Ignition status:', onboardErr);
-      }
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Questionnaire updated from Ignition status',
-      data: {
-        id: updated._id,
-        email: updated.email,
-        status: updated.status,
-        paidAt: updated.paidAt,
-        metadata: updated.metadata,
-        onboarding: onboardingResult,
-      },
-    });
-  } catch (err) {
-    console.error('Error handling Ignition proposal status callback:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: err.message || 'An unexpected error occurred',
-    });
-  }
 };
 
 module.exports = {
