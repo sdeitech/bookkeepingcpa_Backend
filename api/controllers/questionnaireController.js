@@ -1,5 +1,6 @@
 const QuestionnaireResponse = require('../models/questionnaireResponse.model');
 const emailService = require('../services/email.service');
+const EngagementLetter = require('../models/EngagementLetter');
 
 /**
  * Plan recommendation logic (same as frontend)
@@ -93,106 +94,96 @@ const submitQuestionnaire = async (req, res) => {
   try {
     const { email, name, answers } = req.body;
 
-    // Validate required fields
     if (!email || !name || !answers) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields',
-        message: 'email, name, and answers are required'
+        message: "email, name, and answers are required",
       });
     }
 
-    // Validate email format
-    const emailRegex = /^\S+@\S+\.\S+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1️⃣ Block if engagement letter already SENT or SIGNED
+    const engagementLetter = await EngagementLetter.findOne({
+      email: normalizedEmail,
+      status: { $in: ["SENT", "SIGNED"] },
+    });
+
+    if (engagementLetter) {
+      return res.status(409).json({
         success: false,
-        error: 'Invalid email format',
-        message: 'Please provide a valid email address'
+        message:
+          "Engagement letter already sent. Questionnaire cannot be resubmitted.",
       });
     }
 
-    // Validate answers
+    // 2️⃣ Validate answers
     const validation = validateAnswers(answers);
     if (!validation.valid) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid answers',
-        message: 'One or more answer values are invalid',
-        errors: validation.errors
+        message: "Invalid answers",
+        errors: validation.errors,
       });
     }
 
-    // Calculate recommended plan
+    // 3️⃣ Calculate plan
     const recommendedPlan = recommendPlan(answers);
 
-    // Create questionnaire response
-    const questionnaireResponse = new QuestionnaireResponse({
-      email: email.toLowerCase().trim(),
-      name: name.trim(),
-      answers: {
-        q1Revenue: answers.q1Revenue || null,
-        q2Support: answers.q2Support || null,
-        q3Customization: answers.q3Customization || null,
-        q4Structure: answers.q4Structure || null,
-        q5Cleanup: answers.q5Cleanup || null,
-        q6Tax: answers.q6Tax || null
-      },
-      recommendedPlan,
-      status: 'pending',
-      metadata: {
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.get('user-agent') || null,
-        source: 'web'
-      }
+    // 4️⃣ Find existing questionnaire
+    let questionnaire = await QuestionnaireResponse.findOne({
+      email: normalizedEmail,
     });
 
-    // Save to database
-    await questionnaireResponse.save();
-
-    // Return success response
-    return res.status(201).json({
-      success: true,
-      message: 'Questionnaire submitted successfully',
-      data: {
-        id: questionnaireResponse._id,
-        email: questionnaireResponse.email,
-        recommendedPlan: questionnaireResponse.recommendedPlan,
-        status: questionnaireResponse.status,
-        submittedAt: questionnaireResponse.createdAt
-      }
-    });
-
-  } catch (error) {
-    console.error('Error submitting questionnaire:', error);
-
-    // Handle duplicate email error (if unique index is enabled)
-    if (error.code === 11000) {
+    // 5️⃣ Block only if questionnaire already COMPLETED
+    if (questionnaire?.status === "onboarded") {
       return res.status(409).json({
         success: false,
-        error: 'Duplicate submission',
-        message: 'A questionnaire response with this email already exists'
+        message: "Questionnaire already submitted",
       });
     }
 
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        message: error.message,
-        errors: Object.values(error.errors).map(e => e.message)
+    // 6️⃣ Create or update questionnaire
+    if (!questionnaire) {
+      questionnaire = new QuestionnaireResponse({
+        email: normalizedEmail,
       });
     }
 
-    // Generic error
+    questionnaire.name = name.trim();
+    questionnaire.answers = answers;
+    questionnaire.recommendedPlan = recommendedPlan;
+    questionnaire.status = "pending";
+    questionnaire.metadata = {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") || null,
+      source: "web",
+    };
+
+    // remove TTL if any
+    questionnaire.expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await questionnaire.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Questionnaire submitted successfully",
+      data: {
+        email: questionnaire.email,
+        recommendedPlan,
+        status: questionnaire.status,
+      },
+    });
+  } catch (error) {
+    console.error("Submit questionnaire error:", error);
+
     return res.status(500).json({
       success: false,
-      error: 'Failed to submit questionnaire',
-      message: error.message || 'An unexpected error occurred'
+      message: "Failed to submit questionnaire",
     });
   }
 };
+
 
 /**
  * Get questionnaire response by email

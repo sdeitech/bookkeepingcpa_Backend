@@ -4,6 +4,8 @@ const {
   testZapierWebhook,
   zapierStatusCallback,
   ignitionProposalStatusCallback,
+  sendToPandaDoc,
+  pandadocWebhookHandler,
 } = require('../controllers/zapierController');
 
 module.exports = function (app, validator) {
@@ -24,6 +26,10 @@ module.exports = function (app, validator) {
     jsonParser,
     ignitionProposalStatusCallback
   );
+
+  app.post('/api/integrations/zapier/pandadoc', jsonParser, sendToPandaDoc);
+
+  app.post('/api/webhooks/pandadoc', jsonParser, pandadocWebhookHandler);
 
   // Test Zapier webhook (development only)
   if (process.env.NODE_ENV !== 'production') {

@@ -31,6 +31,10 @@ const zapierJobSchema = new mongoose.Schema(
             client_URL: String,
         },
 
+        pandaDoc: {
+            document_URL: String,
+        },
+
         retryCount: {
             type: Number,
             default: 0,
