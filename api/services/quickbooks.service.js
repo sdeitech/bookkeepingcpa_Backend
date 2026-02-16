@@ -101,6 +101,7 @@ class QuickBooksService {
       console.log('✅ Manual token exchange successful');
       const tokenData = response.data;
 
+
       // Return in the same format as the library would
       return {
         accessToken: tokenData.access_token,
@@ -196,27 +197,45 @@ class QuickBooksService {
    */
   async refreshAccessToken(refreshToken) {
     try {
-      // Set the refresh token in the client
+      console.log("🔁 Attempting to refresh token...");
+      console.log("📍 Refresh token to use:", refreshToken ? `${refreshToken.substring(0, 10)}...${refreshToken.substring(refreshToken.length - 10)}` : 'MISSING');
+
+      // Set the COMPLETE token object with all required fields
       this.oauthClient.token.setToken({
+        token_type: 'bearer',
         refresh_token: refreshToken,
-        token_type: 'Bearer'
+        access_token: '', // Can be empty, will be replaced
+        expires_in: 3600,
+        x_refresh_token_expires_in: 8726400,
+        realmId: '' // Can be empty
       });
+
+      // Log what's actually in the client before refresh
+      console.log("📍 oauthClient token before refresh:", JSON.stringify(this.oauthClient.token.getToken()));
 
       const authResponse = await this.oauthClient.refresh();
 
+      // Get the new token object
+      const token = authResponse.getToken();
+
       console.log('✅ Token refresh successful');
-      console.log('📍 New expires in:', authResponse.expires_in || 3600, 'seconds');
+      console.log('📍 New tokens:', JSON.stringify(token));
+      console.log('📍 New expires in:', token.expires_in || 3600, 'seconds');
 
       return {
-        accessToken: authResponse.access_token || authResponse.getToken().access_token,
-        refreshToken: authResponse.refresh_token || authResponse.getToken().refresh_token,
-        expiresIn: authResponse.expires_in || 3600,
-        tokenType: authResponse.token_type || 'Bearer'
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token,
+        expiresIn: token.expires_in || 3600,
+        tokenType: token.token_type || 'Bearer'
       };
     } catch (error) {
-      console.error('❌ Token refresh failed:', error);
-      console.error('Error details:', error.authResponse?.json || error);
-      throw new Error(`QuickBooks token refresh failed: ${error.message || 'Unknown error'}`);
+      console.error('❌ Token refresh failed');
+      console.error('The error message is:', error.originalMessage || error.message);
+      if (error.intuit_tid) {
+        console.error('Intuit TID:', error.intuit_tid);
+      }
+
+      throw new Error(`QuickBooks token refresh failed: ${error.originalMessage || error.message || 'Unknown error'}`);
     }
   }
 
@@ -469,55 +488,71 @@ class QuickBooksService {
    * Based on: https://developer.intuit.com/app/developer/qbo/docs/api/accounting/report-entities/profitandloss
    */
   async getProfitLossReport(accessToken, realmId, params = {}) {
-    try {
-      const queryParams = new URLSearchParams({
-        start_date: params.startDate,
-        end_date: params.endDate,
-        summarize_column_by: params.summarizeBy || 'Total'
-      }).toString();
-
-      const response = await this.makeApiCall({
-        url: `${this.apiBaseUrl}/v3/company/${realmId}/reports/ProfitAndLoss?${queryParams}`,
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      return response;
-    } catch (error) {
-      console.error('❌ Failed to fetch P&L report:', error);
-      throw new Error(`Failed to fetch P&L report: ${error.message}`);
-    }
+    return this.getReport(accessToken, realmId, 'ProfitAndLoss', {
+      ...params,
+      accountingMethod: params.accountingMethod || 'Accrual',
+    });
   }
+
 
   /**
    * Get Balance Sheet Report
    * Based on: https://developer.intuit.com/app/developer/qbo/docs/api/accounting/report-entities/balancesheet
    */
   async getBalanceSheetReport(accessToken, realmId, params = {}) {
-    try {
-      const queryParams = new URLSearchParams({
-        start_date: params.startDate,
-        end_date: params.endDate,
-        summarize_column_by: params.summarizeBy || 'Total'
-      }).toString();
+    return this.getReport(accessToken, realmId, 'BalanceSheet', {
+      ...params,
+      accountingMethod: params.accountingMethod || 'Accrual',
+    });
+  }
 
-      const response = await this.makeApiCall({
-        url: `${this.apiBaseUrl}/v3/company/${realmId}/reports/BalanceSheet?${queryParams}`,
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
+  async getGeneralLedgerReport(accessToken, realmId, params = {}) {
+    return this.getReport(accessToken, realmId, 'GeneralLedger', {
+      ...params,
+      accountingMethod: params.accountingMethod || 'Accrual',
+    });
+  }
 
-      return response;
-    } catch (error) {
-      console.error('❌ Failed to fetch balance sheet:', error);
-      throw new Error(`Failed to fetch balance sheet: ${error.message}`);
+  async getCashFlowReport(accessToken, realmId, params = {}) {
+    return this.getReport(accessToken, realmId, 'StatementOfCashFlows', {
+      ...params,
+      accountingMethod: params.accountingMethod || 'Accrual',
+    });
+  }
+
+
+  async getTrialBalanceReport(accessToken, realmId, params = {}) {
+    return this.getReport(accessToken, realmId, 'TrialBalance', {
+      ...params,
+      accountingMethod: params.accountingMethod || 'Accrual',
+    });
+  }
+
+
+  /**
+   * Format date for QuickBooks report params (YYYY-MM-DD)
+   */
+  formatReportDate(dateInput) {
+    if (!dateInput) return undefined;
+
+    let date = dateInput;
+    if (typeof dateInput === 'string') {
+      const parsed = new Date(dateInput);
+      if (!isNaN(parsed)) {
+        date = parsed;
+      } else {
+        return dateInput;
+      }
     }
+
+    if (date instanceof Date && !isNaN(date)) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    return dateInput;
   }
 
   /**
@@ -578,6 +613,225 @@ class QuickBooksService {
       throw new Error(`Failed to get user info: ${error.message}`);
     }
   }
+
+  async getDashboardStats(accessToken, realmId) {
+    try {
+      // ---- 1️⃣ Cash Balance ----
+      const accountQuery = "SELECT * FROM Account WHERE AccountType = 'Bank'";
+
+      const accountsResponse = await this.makeApiCall({
+        url: `${this.apiBaseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(accountQuery)}`,
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+
+      const accounts = accountsResponse.QueryResponse?.Account || [];
+
+      const cashBalance = accounts
+        .filter(acc => acc.Active)
+        .reduce((sum, acc) => sum + Number(acc.CurrentBalance || 0), 0);
+
+      // ---- 2️⃣ Last Month Revenue ----
+      const now = new Date();
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      const startDate = firstDayLastMonth;
+      const endDate = lastDayLastMonth;
+
+      const params = {
+        start_date: startDate,
+        end_date: endDate,
+        summarize_column_by: 'Total'
+      };
+
+      const revenueResponse = await this.getReport(accessToken, realmId, 'ProfitAndLoss', {
+        ...params,
+        accountingMethod: params.accountingMethod || 'Accrual',
+      });
+
+
+      const rows = revenueResponse.Rows?.Row || [];
+
+      let lastMonthRevenue = 0;
+
+      rows.forEach(section => {
+        if (section?.group === "NetIncome" && section?.Summary?.ColData) {
+          const value = section.Summary.ColData[1]?.value;
+          if (!isNaN(value)) {
+            lastMonthRevenue = Number(value);
+          }
+        }
+      });
+
+      // ---- 3️⃣ Return Both ----
+      return {
+        cashBalance,
+        lastMonthRevenue,
+      };
+
+    } catch (error) {
+      console.error('❌ Failed to fetch dashboard stats:', error);
+      throw new Error(`Failed to fetch dashboard stats: ${error.message}`);
+    }
+  }
+
+
+  async getEssentialPlanDashboardStats(accessToken, realmId) {
+    try {
+      // // ---- 1️⃣ Cash Balance ----
+      // const accountQuery = "SELECT * FROM Account WHERE AccountType = 'Bank'";
+
+      // const accountsResponse = await this.makeApiCall({
+      //   url: `${this.apiBaseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(accountQuery)}`,
+      //   method: 'GET',
+      //   headers: {
+      //     Accept: 'application/json',
+      //     Authorization: `Bearer ${accessToken}`
+      //   }
+      // });
+
+      // const accounts = accountsResponse.QueryResponse?.Account || [];
+
+      // const cashBalance = accounts
+      //   .filter(acc => acc.Active)
+      //   .reduce((sum, acc) => sum + Number(acc.CurrentBalance || 0), 0);
+
+      // ---- 2️⃣ Current Month Revenue ----
+      const now = new Date();
+
+      // First day of current month
+      const firstDayCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Today (or last day of month if you prefer full month projection)
+      const today = new Date();
+
+      const startDate = firstDayCurrentMonth;
+      const endDate = today;
+
+      console.log('📅 Fetching P&L report for current month:', { startDate, endDate });
+
+
+      const params = {
+        start_date: startDate,
+        end_date: endDate,
+        summarize_column_by: 'Total'
+      };
+
+      const revenueResponse = await this.getReport(accessToken, realmId, 'ProfitAndLoss', {
+        ...params,
+        accountingMethod: params.accountingMethod || 'Accrual',
+      });
+
+      console.log(revenueResponse)
+
+
+      const rows = revenueResponse.Rows?.Row || [];
+
+      // let lastMonthRevenue = 0;
+
+      // rows.forEach(section => {
+      //   if (section?.group === "NetIncome" && section?.Summary?.ColData) {
+      //     const value = section.Summary.ColData[1]?.value;
+      //     if (!isNaN(value)) {
+      //       lastMonthRevenue = Number(value);
+      //     }
+      //   }
+      // });
+
+      const revenue = this.extractValueByGroup(rows, "Income");
+      const expenses = this.extractValueByGroup(rows, "Expenses");
+      const netIncome = this.extractValueByGroup(rows, "NetIncome");
+      const cogs = this.extractValueByGroup(rows, "COGS");
+
+      // Gross Margin %
+      const grossMargin =
+        revenue > 0
+          ? (((revenue - cogs) / revenue) * 100).toFixed(2)
+          : 0;
+
+
+
+      // ---- 3️⃣ Return Both ----
+      return {
+        // cashBalance,
+        // lastMonthRevenue,
+        revenue,
+        expenses,
+        netIncome,
+        grossMargin
+      };
+
+    } catch (error) {
+      console.error('❌ Failed to fetch dashboard stats:', error);
+      throw new Error(`Failed to fetch dashboard stats: ${error.message}`);
+    }
+  }
+
+
+  extractValueByGroup(rows, groupName) {
+    for (const row of rows) {
+      if (row?.group === groupName && row?.Summary?.ColData) {
+        return Number(row.Summary.ColData[1]?.value || 0);
+      }
+      if (row?.Rows?.Row) {
+        const result = this.extractValueByGroup(row.Rows.Row, groupName);
+        if (result !== 0) return result;
+      }
+    }
+    return 0;
+  };
+
+  async getReport(accessToken, realmId, reportName, params = {}) {
+    try {
+      console.log(`📊 Fetching ${reportName} report with raw params:`, params);
+      const startDateRaw = params.startDate ?? params.start_date;
+      const endDateRaw = params.endDate ?? params.end_date;
+
+      const startDate = this.formatReportDate(startDateRaw);
+      const endDate = this.formatReportDate(endDateRaw);
+
+      console.log(`📅 Fetching ${reportName} report with params:`, {
+        startDate: startDate || 'Not provided',
+        endDate: endDate || 'Not provided',
+        summarizeBy: params.summarizeBy || 'Not provided',
+        accountingMethod: params.accountingMethod || 'Not provided'
+      });
+
+      const queryParams = new URLSearchParams();
+
+      if (startDate) queryParams.set('start_date', startDate);
+      if (endDate) queryParams.set('end_date', endDate);
+
+      if (params.summarizeBy) {
+        queryParams.set('summarize_column_by', params.summarizeBy);
+      }
+
+      // if (params.accountingMethod) {
+      //   queryParams.set('accounting_method', params.accountingMethod);
+      // }
+
+      const response = await this.makeApiCall({
+        url: `${this.apiBaseUrl}/v3/company/${realmId}/reports/${reportName}?${queryParams.toString()}`,
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      console.error(`❌ Failed to fetch ${reportName}:`, error);
+      throw new Error(`Failed to fetch ${reportName}: ${error.message}`);
+    }
+  }
+
+
+
+
 
   /**
    * Build query string for QuickBooks API
@@ -666,7 +920,12 @@ class QuickBooksService {
 
     return hash === signature;
   }
+
+
+
 }
 
 // Export as singleton
 module.exports = new QuickBooksService();
+
+

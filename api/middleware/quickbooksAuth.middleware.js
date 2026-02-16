@@ -4,6 +4,8 @@ const encryptionService = require('../services/encryption.services');
 const resModel = require('../lib/resModel');
 const { getUserId } = require('../utils/getUserContext');
 
+
+
 /**
  * Middleware to check QuickBooks connection and refresh token if needed
  * Attaches quickbooksCompany to req for use in controllers
@@ -132,7 +134,99 @@ const quickbooksAuthOptional = async (req, res, next) => {
   }
 };
 
+
+const refreshLocks = new Map(); // in-memory lock (safe for single instance)
+
+const ensureValidQuickBooksToken = async (req, res, next) => {
+  console.log(req.query)
+  try {
+    const userId = req.query.clientId ? req.query.clientId : req.userInfo?.id;
+    console.log("Ensuring valid QuickBooks token for user:", userId);
+
+    const company = await QuickBooksCompany.findOne({ userId });
+
+    if (!company || !company.isActive) {
+      return res.status(404).json({
+        success: false,
+        message: "QuickBooks account not connected",
+      });
+    }
+
+    const expiresSoon =
+      !company.tokenExpiresAt ||
+      Date.now() >=
+        new Date(company.tokenExpiresAt).getTime() - 5 * 60 * 1000; // 5 min buffer
+
+    if (expiresSoon) {
+      await refreshWithLock(company);
+    }
+
+    req.quickbooksCompany = company;
+    req.quickbooksAccessToken = encryptionService.decrypt(
+      company.accessToken
+    );
+
+    next();
+  } catch (error) {
+    console.error("Token validation failed:", error);
+
+    return res.status(401).json({
+      success: false,
+      message:
+        "QuickBooks authentication failed. Please reconnect your account.",
+    });
+  }
+};
+
+async function refreshWithLock(company) {
+  const userId = company.userId;
+
+  if (refreshLocks.get(userId)) {
+    return refreshLocks.get(userId);
+  }
+
+  const refreshPromise = (async () => {
+    console.log("🔁 Refreshing QuickBooks token...");
+
+    const decryptedRefreshToken =
+      encryptionService.decrypt(company.refreshToken);
+
+    const newTokenData =
+      await quickbooksService.refreshAccessToken(decryptedRefreshToken);
+
+    if (!newTokenData.refreshToken) {
+      throw new Error("QuickBooks did not return new refresh token");
+    }
+
+    company.accessToken = encryptionService.encrypt(
+      newTokenData.accessToken
+    );
+    company.refreshToken = encryptionService.encrypt(
+      newTokenData.refreshToken
+    );
+    company.tokenExpiresAt = new Date(
+      Date.now() + newTokenData.expiresIn * 1000
+    );
+
+    await company.save();
+
+    console.log("✅ QuickBooks token refreshed successfully");
+  })();
+
+  refreshLocks.set(userId, refreshPromise);
+
+  try {
+    await refreshPromise;
+  } finally {
+    refreshLocks.delete(userId);
+  }
+}
+
+
+
+
 module.exports = {
   quickbooksAuthMiddleware,
-  quickbooksAuthOptional
+  quickbooksAuthOptional,
+  ensureValidQuickBooksToken,
 };

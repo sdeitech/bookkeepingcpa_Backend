@@ -7,13 +7,13 @@ const { getUserId } = require('../utils/getUserContext');
 // Helper function to convert month names to numbers
 const convertMonthToNumber = (monthString) => {
   if (!monthString || typeof monthString === 'number') return monthString;
-  
+
   const months = {
     'January': 1, 'February': 2, 'March': 3, 'April': 4,
     'May': 5, 'June': 6, 'July': 7, 'August': 8,
     'September': 9, 'October': 10, 'November': 11, 'December': 12
   };
-  
+
   return months[monthString] || null;
 };
 
@@ -25,7 +25,7 @@ const quickbooksController = {
   getAuthorizationUrl: async (req, res) => {
     try {
       const userId = getUserId(req); // Support admin override
-      
+
       if (!userId) {
         resModel.success = false;
         resModel.message = 'User authentication required';
@@ -51,7 +51,7 @@ const quickbooksController = {
 
       // Generate authorization URL with state
       const { url, state } = quickbooksService.generateAuthUrl(userId);
-      
+
       resModel.success = true;
       resModel.message = 'Authorization URL generated successfully';
       resModel.data = {
@@ -75,7 +75,7 @@ const quickbooksController = {
   handleCallback: async (req, res) => {
     try {
       const { code, state, realmId, error } = req.query;
-      
+
       console.log('🔍 QuickBooks OAuth Callback received:');
       console.log('  - Full URL:', req.originalUrl);
       console.log('  - Code:', code ? `Present (length: ${code.length})` : 'Missing');
@@ -83,7 +83,7 @@ const quickbooksController = {
       console.log('  - RealmId:', realmId || 'Missing');
       console.log('  - Error:', error || 'None');
       console.log('  - All query params:', req.query);
-      
+
       // Check for authorization errors first
       if (error) {
         console.error('❌ QuickBooks authorization error:', error);
@@ -96,7 +96,7 @@ const quickbooksController = {
       if (!code) missingParams.push('code');
       if (!state) missingParams.push('state');
       if (!realmId) missingParams.push('realmId');
-      
+
       if (missingParams.length > 0) {
         const errorMessage = `Missing required parameters: ${missingParams.join(', ')}`;
         console.error('❌', errorMessage);
@@ -124,19 +124,21 @@ const quickbooksController = {
 
       // Log token exchange attempt
       console.log('🔄 Starting token exchange process...');
-      
+
       // Exchange code for tokens - pass all the parameters we received
       const tokenData = await quickbooksService.exchangeCodeForTokens(code, realmId, state);
       console.log('✅ Tokens exchanged successfully');
-      
+      console.log(tokenData.accessToken);
+
       // Get company information
       const companyInfo = await quickbooksService.getCompanyInfo(tokenData.accessToken, realmId);
       console.log('✅ Company info fetched:', companyInfo.CompanyName);
-      
+
+
       // Encrypt tokens before storing
       const encryptedAccessToken = encryptionService.encrypt(tokenData.accessToken);
       const encryptedRefreshToken = encryptionService.encrypt(tokenData.refreshToken);
-      
+
       // Calculate token expiry
       const tokenExpiresAt = new Date(Date.now() + (tokenData.expiresIn * 1000));
       const refreshTokenExpiresAt = new Date(Date.now() + (tokenData.refreshTokenExpiresIn * 1000));
@@ -145,7 +147,7 @@ const quickbooksController = {
       console.log('💾 Saving company data to database...');
       console.log('📍 Raw fiscal year start month:', companyInfo.FiscalYearStartMonth);
       console.log('📍 Raw tax year start month:', companyInfo.TaxYearStartMonth);
-      
+
       const companyData = await QuickBooksCompany.findOneAndUpdate(
         { userId },
         {
@@ -181,7 +183,7 @@ const quickbooksController = {
           runValidators: true
         }
       );
-      
+
       console.log('✅ Company data saved successfully');
 
       console.log(`✅ QuickBooks connected: ${companyData.companyName} (${companyData.companyId})`);
@@ -189,7 +191,7 @@ const quickbooksController = {
       // Redirect to frontend with success
       const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_connected=true&company=${encodeURIComponent(companyData.companyName)}`;
       return res.redirect(frontendUrl);
-      
+
     } catch (error) {
       console.error('❌ Handle callback error:', error);
       const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?qb_error=${encodeURIComponent(error.message)}`;
@@ -206,7 +208,7 @@ const quickbooksController = {
       const userId = getUserId(req);
       const company = await QuickBooksCompany.findOne({ userId })
         .select('isActive companyId companyName companyEmail companyAddress baseCurrency lastSyncedAt tokenExpiresAt createdAt stats isPaused');
-      
+
       if (!company) {
         resModel.success = true;
         resModel.message = 'QuickBooks account not connected';
@@ -219,7 +221,7 @@ const quickbooksController = {
       const now = new Date();
       const tokenExpired = company.tokenExpiresAt < now;
       const needsRefresh = company.needsTokenRefresh;
-      
+
       resModel.success = true;
       resModel.message = 'Connection status retrieved';
       resModel.data = {
@@ -254,7 +256,7 @@ const quickbooksController = {
     try {
       const userId = getUserId(req);
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected';
@@ -264,10 +266,10 @@ const quickbooksController = {
 
       // Decrypt refresh token
       const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
-      
+
       // Get new access token
       const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
-      
+
       // Update tokens in database
       company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
       company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
@@ -283,7 +285,7 @@ const quickbooksController = {
       return res.status(200).json(resModel);
     } catch (error) {
       console.error('Refresh token error:', error);
-      
+
       // If refresh fails, mark account as inactive
       await QuickBooksCompany.findOneAndUpdate(
         { userId: req.userInfo?.id },
@@ -296,7 +298,7 @@ const quickbooksController = {
           }
         }
       );
-      
+
       resModel.success = false;
       resModel.message = 'Token refresh failed. Please reconnect your QuickBooks account.';
       resModel.data = null;
@@ -312,14 +314,14 @@ const quickbooksController = {
     try {
       const userId = getUserId(req);
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected';
         resModel.data = null;
         return res.status(404).json(resModel);
       }
-      
+
       // Try to revoke tokens
       try {
         const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
@@ -329,10 +331,10 @@ const quickbooksController = {
         console.error('Failed to revoke tokens:', revokeError);
         // Continue with disconnect even if revoke fails
       }
-      
+
       // Delete company record
       await QuickBooksCompany.findOneAndDelete({ userId });
-      
+
       resModel.success = true;
       resModel.message = 'QuickBooks account disconnected successfully';
       resModel.data = null;
@@ -351,10 +353,12 @@ const quickbooksController = {
    * GET /api/quickbooks/invoices
    */
   getInvoices: async (req, res) => {
+    console.log('📍 Get invoices request received with query:', req.query);
     try {
       const userId = getUserId(req);
+      console.log('📍 Fetching invoices for user:', userId);
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company || !company.isActive) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected or inactive';
@@ -365,20 +369,21 @@ const quickbooksController = {
       // Refresh token if needed
       let accessToken = encryptionService.decrypt(company.accessToken);
       
-      if (company.needsTokenRefresh) {
-        const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
-        const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
-        accessToken = newTokenData.accessToken;
-        
-        company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
-        company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
-        company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
-        await company.save();
-      }
-      
+
+      // if (company.needsTokenRefresh) {
+      //   const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
+      //   const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
+      //   accessToken = newTokenData.accessToken;
+
+      //   company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
+      //   company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
+      //   company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
+      //   await company.save();
+      // }
+
       // Fetch invoices
       const invoices = await quickbooksService.getInvoices(accessToken, company.companyId, req.query);
-      
+
       // Update sync timestamp and stats
       company.lastInvoiceSync = new Date();
       company.lastSyncedAt = new Date();
@@ -401,7 +406,7 @@ const quickbooksController = {
       return res.status(200).json(resModel);
     } catch (error) {
       console.error('Get invoices error:', error);
-      
+
       // Record error
       if (req.userInfo?.id) {
         const company = await QuickBooksCompany.findOne({ userId: req.userInfo.id });
@@ -409,13 +414,149 @@ const quickbooksController = {
           await company.recordError(error);
         }
       }
-      
+
       resModel.success = false;
       resModel.message = `Failed to fetch invoices: ${error.message}`;
       resModel.data = null;
       return res.status(500).json(resModel);
     }
   },
+
+  getCashBalance: async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const company = await QuickBooksCompany.findOne({ userId });
+  
+      if (!company || !company.isActive) {
+        resModel.success = false;
+        resModel.message = 'QuickBooks account not connected or inactive';
+        resModel.data = null;
+        return res.status(404).json(resModel);
+      }
+  
+      // Decrypt access token
+      let accessToken = encryptionService.decrypt(company.accessToken);
+  
+      // Fetch bank accounts from QuickBooks
+      const accounts = await quickbooksService.getDashboardStats(
+        accessToken,
+        company.companyId
+      );
+      
+      const totalCashBalance = accounts.cashBalance
+      const lastMonthRevenue = accounts.lastMonthRevenue;
+      const revenue = accounts.revenue;
+      const expenses = accounts.expenses;
+      const netIncome = accounts.netIncome;
+      const grossMargin = accounts.grossMargin;
+
+     
+      
+  
+      // Update stats
+      company.stats.cashBalance = totalCashBalance;
+      company.stats.lastMonthRevenue = lastMonthRevenue;
+      company.lastSyncedAt = new Date();
+      await company.save();
+  
+      resModel.success = true;
+      resModel.message = 'Cash balance fetched successfully';
+      resModel.data = {
+        stats:company.stats,
+        revenue,
+        expenses,
+        netIncome,
+        grossMargin
+      };
+  
+      return res.status(200).json(resModel);
+    } catch (error) {
+      console.error('Get cash balance error:', error);
+  
+      if (req.userInfo?.id) {
+        const company = await QuickBooksCompany.findOne({ userId: req.userInfo.id });
+        if (company) {
+          await company.recordError(error);
+        }
+      }
+  
+      resModel.success = false;
+      resModel.message = `Failed to fetch cash balance: ${error.message}`;
+      resModel.data = null;
+      return res.status(500).json(resModel);
+    }
+  },
+
+
+  getEssentailDashboardstats: async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const company = await QuickBooksCompany.findOne({ userId });
+  
+      if (!company || !company.isActive) {
+        resModel.success = false;
+        resModel.message = 'QuickBooks account not connected or inactive';
+        resModel.data = null;
+        return res.status(404).json(resModel);
+      }
+  
+      // Decrypt access token
+      let accessToken = encryptionService.decrypt(company.accessToken);
+  
+      // Fetch bank accounts from QuickBooks
+      const accounts = await quickbooksService.getEssentialPlanDashboardStats(
+        accessToken,
+        company.companyId
+      );
+      
+      // const totalCashBalance = accounts.cashBalance
+      // const lastMonthRevenue = accounts.lastMonthRevenue;
+      const revenue = accounts.revenue;
+      const expenses = accounts.expenses;
+      const netIncome = accounts.netIncome;
+      const grossMargin = accounts.grossMargin;
+
+     
+      
+  
+      // Update stats
+      // company.stats.cashBalance = totalCashBalance;
+      // company.stats.lastMonthRevenue = lastMonthRevenue;
+      company.stats.revenue = revenue;
+      company.stats.expenses = expenses;
+      company.stats.netIncome = netIncome;
+      company.stats.grossMargin = grossMargin;
+      company.lastSyncedAt = new Date();
+      await company.save();
+  
+      resModel.success = true;
+      resModel.message = 'Essential Plan data fetched successfully';
+      resModel.data = {
+        stats:company.stats,
+        revenue,
+        expenses,
+        netIncome,
+        grossMargin
+      };
+  
+      return res.status(200).json(resModel);
+    } catch (error) {
+      console.error('Get cash balance error:', error);
+  
+      if (req.userInfo?.id) {
+        const company = await QuickBooksCompany.findOne({ userId: req.userInfo.id });
+        if (company) {
+          await company.recordError(error);
+        }
+      }
+  
+      resModel.success = false;
+      resModel.message = `Failed to fetch cash balance: ${error.message}`;
+      resModel.data = null;
+      return res.status(500).json(resModel);
+    }
+  },
+  
 
   /**
    * Get customers from QuickBooks
@@ -425,7 +566,7 @@ const quickbooksController = {
     try {
       const userId = getUserId(req);
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company || !company.isActive) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected or inactive';
@@ -434,22 +575,22 @@ const quickbooksController = {
       }
 
       let accessToken = encryptionService.decrypt(company.accessToken);
-      
+
       // Refresh token if needed
-      if (company.needsTokenRefresh) {
-        const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
-        const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
-        accessToken = newTokenData.accessToken;
-        
-        company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
-        company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
-        company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
-        await company.save();
-      }
-      
+      // if (company.needsTokenRefresh) {
+      //   const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
+      //   const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
+      //   accessToken = newTokenData.accessToken;
+
+      //   company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
+      //   company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
+      //   company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
+      //   await company.save();
+      // }
+
       // Fetch customers
       const customers = await quickbooksService.getCustomers(accessToken, company.companyId, req.query);
-      
+
       // Update stats
       company.stats.totalCustomers = customers.length;
       company.lastSyncedAt = new Date();
@@ -479,7 +620,7 @@ const quickbooksController = {
     try {
       const userId = req.userInfo?.id;
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company || !company.isActive) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected or inactive';
@@ -488,22 +629,22 @@ const quickbooksController = {
       }
 
       let accessToken = encryptionService.decrypt(company.accessToken);
-      
+
       // Refresh token if needed
-      if (company.needsTokenRefresh) {
-        const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
-        const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
-        accessToken = newTokenData.accessToken;
-        
-        company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
-        company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
-        company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
-        await company.save();
-      }
-      
+      // if (company.needsTokenRefresh) {
+      //   const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
+      //   const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
+      //   accessToken = newTokenData.accessToken;
+
+      //   company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
+      //   company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
+      //   company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
+      //   await company.save();
+      // }
+
       // Fetch expenses
       const expenses = await quickbooksService.getExpenses(accessToken, company.companyId, req.query);
-      
+
       // Update stats
       company.lastExpenseSync = new Date();
       company.lastSyncedAt = new Date();
@@ -537,10 +678,10 @@ const quickbooksController = {
     try {
       const company = req.quickbooksCompany; // From middleware
       let accessToken = encryptionService.decrypt(company.accessToken);
-      
+
       // Fetch vendors
       const vendors = await quickbooksService.getVendors(accessToken, company.companyId, req.query);
-      
+
       // Update stats
       company.stats.totalVendors = vendors.length;
       company.lastSyncedAt = new Date();
@@ -570,10 +711,10 @@ const quickbooksController = {
     try {
       const company = req.quickbooksCompany; // From middleware
       let accessToken = encryptionService.decrypt(company.accessToken);
-      
+
       // Fetch bills
       const bills = await quickbooksService.getBills(accessToken, company.companyId, req.query);
-      
+
       // Update stats
       company.stats.totalBills = bills.length;
       if (bills.length > 0) {
@@ -637,6 +778,7 @@ const quickbooksController = {
     }
   },
 
+
   /**
    * Get Balance Sheet report
    * GET /api/quickbooks/reports/balance-sheet
@@ -676,6 +818,41 @@ const quickbooksController = {
     }
   },
 
+  getGeneralLedgerReport: async (req, res) => {
+    try {
+      const company = req.quickbooksCompany; // From middleware
+      let accessToken = encryptionService.decrypt(company.accessToken);
+      
+      // Validate date parameters
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        resModel.success = false;
+        resModel.message = 'Start date and end date are required';
+        resModel.data = null;
+        return res.status(400).json(resModel);
+      }
+      
+      // Fetch report
+      const report = await quickbooksService.getGeneralLedgerReport(accessToken, company.companyId, req.query);
+      
+      // Update stats
+      company.lastReportSync = new Date();
+      company.stats.lastReportGenerated = new Date();
+      await company.save();
+
+      resModel.success = true;
+      resModel.message = 'General Ledger report generated successfully';
+      resModel.data = report;
+      return res.status(200).json(resModel);
+    } catch (error) {
+      console.error('Get General Ledger report error:', error);
+      resModel.success = false;
+      resModel.message = `Failed to generate report: ${error.message}`;
+      resModel.data = null;
+      return res.status(500).json(resModel);
+    }
+  },
+
   /**
    * Get dashboard data
    * GET /api/quickbooks/dashboard
@@ -684,7 +861,7 @@ const quickbooksController = {
     try {
       const userId = req.userInfo?.id;
       const company = await QuickBooksCompany.findOne({ userId });
-      
+
       if (!company || !company.isActive) {
         resModel.success = false;
         resModel.message = 'QuickBooks account not connected or inactive';
@@ -693,19 +870,19 @@ const quickbooksController = {
       }
 
       let accessToken = encryptionService.decrypt(company.accessToken);
-      
+
       // Refresh token if needed
       if (company.needsTokenRefresh) {
         const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
         const newTokenData = await quickbooksService.refreshAccessToken(decryptedRefreshToken);
         accessToken = newTokenData.accessToken;
-        
+
         company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
         company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
         company.tokenExpiresAt = new Date(Date.now() + (newTokenData.expiresIn * 1000));
         await company.save();
       }
-      
+
       // Prepare dashboard data
       const dashboardData = {
         company: {
@@ -768,11 +945,11 @@ const quickbooksController = {
    */
   health: async (req, res) => {
     const isConfigured = !!(
-      process.env.QUICKBOOKS_CLIENT_ID && 
+      process.env.QUICKBOOKS_CLIENT_ID &&
       process.env.QUICKBOOKS_CLIENT_SECRET &&
       process.env.QUICKBOOKS_REDIRECT_URI
     );
-    
+
     resModel.success = true;
     resModel.message = 'QuickBooks integration health check';
     resModel.data = {
@@ -782,7 +959,63 @@ const quickbooksController = {
       timestamp: new Date().toISOString()
     };
     return res.status(200).json(resModel);
-  }
+  },
+
+  syncQuickBooksData: async (req, res) => {
+    try {
+      const userId = req.userInfo?.id;
+      console.log('🔄 Starting QuickBooks sync for user:', userId);
+  
+      const company = await QuickBooksCompany.findOne({ userId });
+      if (!company || !company.isActive) {
+        return res.status(404).json({
+          success: false,
+          message: "QuickBooks account not connected or inactive",
+          data: null,
+        });
+      }
+  
+      let accessToken = encryptionService.decrypt(company.accessToken);
+  
+      // 🔁 Refresh token if expired (SAME as dashboard)
+      if (company.needsTokenRefresh) {
+        const decryptedRefreshToken = encryptionService.decrypt(company.refreshToken);
+  
+        const newTokenData =
+          await quickbooksService.refreshAccessToken(decryptedRefreshToken);
+  
+        accessToken = newTokenData.accessToken;
+  
+        company.accessToken = encryptionService.encrypt(newTokenData.accessToken);
+        company.refreshToken = encryptionService.encrypt(newTokenData.refreshToken);
+        company.tokenExpiresAt = new Date(
+          Date.now() + newTokenData.expiresIn * 1000
+        );
+  
+        await company.save();
+      }
+  
+  
+      company.lastSyncedAt = new Date();
+      await company.save();
+  
+      return res.status(200).json({
+        success: true,
+        message: "QuickBooks sync completed successfully",
+      });
+  
+    } catch (error) {
+      console.error("QuickBooks sync error:", error);
+  
+      return res.status(500).json({
+        success: false,
+        message: `QuickBooks sync failed: ${error.message}`,
+        data: null,
+      });
+    }
+  },
+  
+
 };
 
 module.exports = quickbooksController;
