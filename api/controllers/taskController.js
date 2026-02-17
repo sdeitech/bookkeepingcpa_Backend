@@ -117,6 +117,7 @@ exports.createTask = async (req, res) => {
 exports.getTasks = async (req, res) => {
     try {
         const user = req.user;
+        console.log('Get tasks for user:', user._id, 'role:', user.role_id);
         const {
             clientId,
             staffId,
@@ -186,10 +187,10 @@ exports.getTasks = async (req, res) => {
 
         // Execute query
         const tasks = await Task.find(query)
-            .populate('assignedTo', 'name email')
-            .populate('assignedBy', 'name email')
-            .populate('clientId', 'name email')
-            .populate('staffId', 'name email')
+            .populate('assignedTo', 'first_name last_name email')
+            .populate('assignedBy', 'first_name last_name email')
+            .populate('clientId', 'first_name last_name email')
+            .populate('staffId', 'first_name last_name email')
             .sort(sort)
             .skip(skip)
             .limit(parseInt(limit));

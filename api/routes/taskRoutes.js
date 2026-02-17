@@ -2,7 +2,7 @@ const taskController = require('../controllers/taskController');
 const settingsController = require('../controllers/settingsController');
 const auth = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
-const upload = require('../services/multer.services');
+const {uploadDocument} = require('../services/multer.services');
 const bodyParser = require('body-parser');
 
 module.exports = function (app, validator) {
@@ -50,7 +50,7 @@ module.exports = function (app, validator) {
   app.post('/api/tasks/:taskId/upload', 
     auth, 
     authorize('task', 'upload'),
-    upload.single('file'),
+    uploadDocument.single('file'),
     taskController.uploadDocument
   );
 
