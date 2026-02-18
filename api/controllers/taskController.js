@@ -221,6 +221,8 @@ exports.getTasks = async (req, res) => {
             })
         };
 
+        
+
         res.status(200).json({
             success: true,
             data: {
@@ -252,13 +254,13 @@ exports.getTask = async (req, res) => {
         const task = req.task;
 
         // Populate all references
-        await task.populate('assignedTo', 'name email');
-        await task.populate('assignedBy', 'name email');
-        await task.populate('clientId', 'name email');
-        await task.populate('staffId', 'name email');
-        await task.populate('reviewedBy', 'name email');
-        await task.populate('helpRequests.requestedBy', 'name email');
-        await task.populate('helpRequests.resolvedBy', 'name email');
+        await task.populate('assignedTo', 'first_name last_name email');
+        await task.populate('assignedBy', 'first_name last_name email');
+        await task.populate('clientId', 'first_name last_name email');
+        await task.populate('staffId', 'first_name last_name email');
+        await task.populate('reviewedBy', 'first_name last_name email');
+        await task.populate('helpRequests.requestedBy', 'first_name last_name email');
+        await task.populate('helpRequests.resolvedBy', 'first_name last_name email');
 
         // Calculate days until due
         const now = new Date();

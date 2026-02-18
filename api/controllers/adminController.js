@@ -8,6 +8,8 @@ const progressService = require('../services/progress.service');
 const ShopifyStore = require('../models/shopifyStoreModel');
 const AmazonSeller = require('../models/amazonSellerModel');
 const QuickBooksCompany = require('../models/quickbooksCompanyModel');
+const Notification = require('../models/notification');
+const firebaseRealtime = require('../services/firebase.realtime.service');
 
 /**
  * Create Staff Member
@@ -536,6 +538,98 @@ module.exports.assignClient = async (req, res) => {
         const populatedAssignment = await AssignClient.findById(savedAssignment._id)
             .populate('staffId', 'first_name last_name email')
             .populate('clientId', 'first_name last_name email');
+
+        // ─────────────────────────────────────────────
+        // NOTIFICATION: Notify Staff Member
+        // ─────────────────────────────────────────────
+        const staffNotification = new Notification({
+            type: 'assignment',
+            title: 'New Client Assigned 👤',
+            message: `You have been assigned a new client: ${client.first_name} ${client.last_name}. Please reach out to get started.`,
+            recipientId: staffId,
+            senderId: adminId,
+            senderName: `${adminUser.first_name} ${adminUser.last_name}`,
+            senderRole: 'admin',
+            priority: 'high',
+            category: 'alert',
+            actionUrl: `/clients/${clientId}`,
+            actionType: 'navigate',
+            actionLabel: 'View Client',
+            metadata: {
+                assignmentId: savedAssignment._id.toString(),
+                clientId: clientId.toString(),
+                clientName: `${client.first_name} ${client.last_name}`,
+                clientEmail: client.email,
+                assignedBy: adminId.toString(),
+                assignedByName: `${adminUser.first_name} ${adminUser.last_name}`,
+            },
+            relatedEntities: {
+                assignmentId: savedAssignment._id
+            },
+            isRead: false,
+            status: 'sent',
+            deliveryStatus: {
+                inApp: {
+                    sent: true,
+                    sentAt: new Date()
+                }
+            },
+            tags: ['assignment', 'client', 'staff']
+        });
+
+        await staffNotification.save();
+
+        await firebaseRealtime.emitNotificationSignal(
+            staffId,
+            staffNotification._id,
+            'new'
+        );
+
+        // ─────────────────────────────────────────────
+        // NOTIFICATION: Notify Client
+        // ─────────────────────────────────────────────
+        const clientNotification = new Notification({
+            type: 'assignment',
+            title: 'You Have Been Assigned a Staff Member 🙌',
+            message: `${staffMember.first_name} ${staffMember.last_name} has been assigned to assist you. Feel free to reach out to them anytime.`,
+            recipientId: clientId,
+            senderId: adminId,
+            senderName: `${adminUser.first_name} ${adminUser.last_name}`,
+            senderRole: 'admin',
+            priority: 'low',
+            category: 'general',
+            actionUrl: `/support`,
+            actionType: 'navigate',
+            actionLabel: 'Contact Support',
+            metadata: {
+                assignmentId: savedAssignment._id.toString(),
+                staffId: staffId.toString(),
+                staffName: `${staffMember.first_name} ${staffMember.last_name}`,
+                staffEmail: staffMember.email,
+                assignedBy: adminId.toString(),
+                assignedByName: `${adminUser.first_name} ${adminUser.last_name}`,
+            },
+            relatedEntities: {
+                assignmentId: savedAssignment._id
+            },
+            isRead: false,
+            status: 'sent',
+            deliveryStatus: {
+                inApp: {
+                    sent: true,
+                    sentAt: new Date()
+                }
+            },
+            tags: ['assignment', 'staff', 'client']
+        });
+
+        await clientNotification.save();
+
+        await firebaseRealtime.emitNotificationSignal(
+            clientId,
+            clientNotification._id,
+            'new'
+        );
         
         resModel.success = true;
         resModel.message = "Client assigned to staff successfully";
