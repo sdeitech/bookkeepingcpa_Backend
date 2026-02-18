@@ -36,6 +36,36 @@ const taskSchema = new mongoose.Schema(
         completedAt: { type: Date, default: null },
         clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
         staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+        templateId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'TaskTemplate',
+            default: null,
+            index: true
+            // null = custom task (not from template)
+        },
+        templateName: {
+            type: String,
+            default: null,
+            maxLength: 200
+            // Stored for history/audit purposes
+        },
+        // For DOCUMENT_UPLOAD tasks - specific document type
+        documentType: {
+            type: String,
+            default: null,
+            maxLength: 200
+            // e.g., "W-2 Forms", "Bank Statements", "Tax Return"
+            // Makes filtering easier: "Show me all W-2 tasks"
+        },
+        // For ACTION tasks - client or staff action?
+        actionCategory: {
+            type: String,
+            enum: ['CLIENT_ACTION', 'STAFF_ACTION'],
+            default: null
+            // CLIENT_ACTION = client needs to do it
+            // STAFF_ACTION = internal staff work
+            // Helps with filtering and notifications
+        },
         // DOCUMENT UPLOAD (for DOCUMENT_UPLOAD type)
         documents: [{
             fileName: String,
@@ -152,5 +182,8 @@ taskSchema.index({ assignedTo: 1, status: 1, dueDate: 1 });
 taskSchema.index({ staffId: 1, status: 1 });
 taskSchema.index({ dueDate: 1, status: 1 });
 taskSchema.index({ status: 1, priority: 1 });
+taskSchema.index({ templateId: 1 }); // For template usage analytics
+taskSchema.index({ documentType: 1 }); // For filtering by document type
+taskSchema.index({ actionCategory: 1 }); // For filtering by action type
 
 module.exports = mongoose.model("Task", taskSchema);
