@@ -12,7 +12,8 @@ module.exports = function (app, validator) {
     require('./notificationRoutes')(app, validator)
     require('./documentRoutes')(app, validator)  // Document upload/management routes
     require('./zapierRoutes')(app, validator)  // Zapier integration routes
-    require('./taskRoutes')(app, validator)
+    require('./taskRoutes')(app, validator)  // Task management routes
+    require('./taskTemplateRoutes')(app, validator)  // Task template routes
     
     // Test routes for Firebase notifications (only in development/staging)
     if (process.env.NODE_ENV !== 'production') {

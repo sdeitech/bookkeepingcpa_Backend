@@ -1,6 +1,7 @@
 const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const Settings = require('../models/settingsModel');
+const TaskTemplate = require('../models/taskTemplateModel');
 
 // CREATE TASK
 exports.createTask = async (req, res) => {
@@ -13,7 +14,12 @@ exports.createTask = async (req, res) => {
             dueDate,
             assignedTo,
             clientId,
-            integrationType
+            integrationType,
+            // NEW TEMPLATE FIELDS
+            templateId,
+            templateName,
+            documentType,
+            actionCategory
         } = req.body;
 
         const createdBy = req.user._id;
@@ -23,6 +29,28 @@ exports.createTask = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: 'Missing required fields'
+            });
+        }
+
+        // Validate type-specific fields
+        if (taskType === 'DOCUMENT_UPLOAD' && !documentType) {
+            return res.status(400).json({
+                success: false,
+                message: 'documentType is required for DOCUMENT_UPLOAD tasks'
+            });
+        }
+
+        if (taskType === 'INTEGRATION' && !integrationType) {
+            return res.status(400).json({
+                success: false,
+                message: 'integrationType is required for INTEGRATION tasks'
+            });
+        }
+
+        if (taskType === 'ACTION' && !actionCategory) {
+            return res.status(400).json({
+                success: false,
+                message: 'actionCategory is required for ACTION tasks'
             });
         }
 
@@ -78,6 +106,11 @@ exports.createTask = async (req, res) => {
             clientId: finalClientId,
             staffId: finalStaffId,
             integrationType: taskType === 'INTEGRATION' ? integrationType : null,
+            // NEW TEMPLATE FIELDS
+            templateId: templateId || null,
+            templateName: templateName || null,
+            documentType: documentType || null,
+            actionCategory: actionCategory || null,
             statusHistory: [{
                 status: 'NOT_STARTED',
                 changedBy: createdBy,
@@ -90,6 +123,14 @@ exports.createTask = async (req, res) => {
                 assignedAt: new Date()
             }]
         });
+
+        // If created from template, increment usage count
+        if (templateId) {
+            await TaskTemplate.findByIdAndUpdate(templateId, {
+                $inc: { usageCount: 1 },
+                lastUsedAt: new Date()
+            });
+        }
 
         // Populate assignee details
         await task.populate('assignedTo', 'name email');
