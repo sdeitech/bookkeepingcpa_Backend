@@ -105,15 +105,18 @@ const quickbooksValidation = {
   getReport: Joi.object({
     // Admin override parameter (optional)
     clientId: Joi.string().optional(),
-    startDate: Joi.date().iso().required().messages({
+    startDate: Joi.date().iso().optional().messages({
       'date.format': 'Start date must be in ISO format (YYYY-MM-DD)',
       'any.required': 'Start date is required for reports'
     }),
-    endDate: Joi.date().iso().required().messages({
+    endDate: Joi.date().iso().optional().messages({
       'date.format': 'End date must be in ISO format (YYYY-MM-DD)',
       'any.required': 'End date is required for reports'
     }),
-    summarizeBy: Joi.string().valid('Total', 'Month', 'Week', 'Day').optional()
+    summarizeBy: Joi.string().valid('Total', 'Month', 'Week', 'Day').optional(),
+    date: Joi.date().iso().optional().messages({
+      'date.format': 'Date must be in ISO format (YYYY-MM-DD)'
+    })
   }),
 
   /**

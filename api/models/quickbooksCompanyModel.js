@@ -125,7 +125,13 @@ const quickbooksCompanySchema = new mongoose.Schema(
       lastInvoiceDate: Date,
       lastBillDate: Date,
       lastExpenseDate: Date,
-      lastReportGenerated: Date
+      lastReportGenerated: Date,
+      cashBalance: Number,
+      lastMonthRevenue: Number,
+      revenue: Number,
+      expenses: Number,
+      netIncome: Number,
+      grossMargin: Number
     }
   },
   {

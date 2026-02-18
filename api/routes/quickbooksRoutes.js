@@ -1,7 +1,7 @@
 const quickbooksController = require('../controllers/quickbooksController');
 const quickbooksValidation = require('../validate-models/quickbooksValidation');
 const authMiddleware = require('../middleware/auth');
-const { quickbooksAuthMiddleware, quickbooksAuthOptional } = require('../middleware/quickbooksAuth.middleware');
+const { quickbooksAuthMiddleware, quickbooksAuthOptional,ensureValidQuickBooksToken } = require('../middleware/quickbooksAuth.middleware');
 
 module.exports = (app, validator) => {
   /**
@@ -79,6 +79,7 @@ module.exports = (app, validator) => {
   app.get('/api/quickbooks/invoices',
     authMiddleware,
     quickbooksAuthMiddleware,
+    ensureValidQuickBooksToken,
     validator.query(quickbooksValidation.getInvoices),
     quickbooksController.getInvoices
   );
@@ -117,6 +118,7 @@ module.exports = (app, validator) => {
   app.get('/api/quickbooks/customers',
     authMiddleware,
     quickbooksAuthMiddleware,
+    ensureValidQuickBooksToken,
     validator.query(quickbooksValidation.getCustomers),
     quickbooksController.getCustomers
   );
@@ -155,6 +157,7 @@ module.exports = (app, validator) => {
   app.get('/api/quickbooks/expenses',
     authMiddleware,
     quickbooksAuthMiddleware,
+    ensureValidQuickBooksToken,
     validator.query(quickbooksValidation.getExpenses),
     quickbooksController.getExpenses
   );
@@ -267,23 +270,12 @@ module.exports = (app, validator) => {
     })
   );
 
-  /**
-   * Get Tax Summary report
-   * GET /api/quickbooks/reports/tax-summary
-   * Required: User authentication, active QuickBooks connection
-   * Query params: startDate (required), endDate (required)
-   */
-  app.get('/api/quickbooks/reports/tax-summary',
+  
+  app.get('/api/quickbooks/reports/general-ledger',
     authMiddleware,
     quickbooksAuthMiddleware,
     validator.query(quickbooksValidation.getReport),
-    quickbooksController.getTaxSummaryReport || ((req, res) => {
-      const resModel = require('../lib/resModel');
-      resModel.success = false;
-      resModel.message = 'Tax Summary report endpoint not yet implemented';
-      resModel.data = null;
-      return res.status(501).json(resModel);
-    })
+    quickbooksController.getGeneralLedgerReport
   );
 
   /**
@@ -343,6 +335,13 @@ module.exports = (app, validator) => {
     quickbooksController.health
   );
 
+  app.get('/api/quickbooks/sync', authMiddleware,
+    quickbooksAuthMiddleware,
+    quickbooksController.syncQuickBooksData)
+
+  app.get("/api/quickbooks/cashBalance", authMiddleware,quickbooksAuthMiddleware, quickbooksController.getCashBalance)
+  app.get("/api/quickbooks/essentialStats", authMiddleware, quickbooksAuthMiddleware, quickbooksController.getEssentailDashboardstats)
+
   /**
    * ==========================================
    * TEST ENDPOINTS (Development Only)
@@ -358,11 +357,11 @@ module.exports = (app, validator) => {
     app.get('/api/quickbooks/test/auth-url', (req, res) => {
       const quickbooksService = require('../services/quickbooks.service');
       const resModel = require('../lib/resModel');
-      
+
       try {
         const testUserId = 'test-user-123';
         const { url, state } = quickbooksService.generateAuthUrl(testUserId);
-        
+
         resModel.success = true;
         resModel.message = 'Test auth URL generated';
         resModel.data = {
