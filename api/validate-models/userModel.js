@@ -17,3 +17,10 @@ module.exports.commonId = joi.object({
   id: joi.string().required(),
 
 })
+
+module.exports.updatePassword = joi.object({
+  currentPassword: joi.string().required(),
+  newPassword: joi.string().required(),
+  confirmNewPassword: joi.string(),
+  confirmPassword: joi.string(),
+}).or('confirmNewPassword', 'confirmPassword')
