@@ -5,15 +5,15 @@ yarn-debug.log*
 yarn-error.log*
 
 # Environment variables
-# .env
-# .env.*
-# !.env.*.example
-# !.env.example
-# .env.local
-# .env.dev
-# .env.test.local
-# .env.prod
-# .env.staging
+.env
+.env.*
+!.env.*.example
+!.env.example
+.env.local
+.env.dev
+.env.test.local
+.env.prod
+.env.staging
 
 # Logs
 logs/
@@ -35,8 +35,8 @@ dist/
 build/
 
 # Dependency directories
-package-lock.json
-yarn.lock
+# package-lock.json
+# yarn.lock
 
 # Test coverage
 coverage/

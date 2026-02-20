@@ -29,4 +29,5 @@ module.exports = function (app, validator) {
    app.get('/api/user/profile', auth, userCntrl.getCurrentUser);  // Get current user profile
    app.put('/api/user/profile', jsonParser, auth, userCntrl.updateUserProfile);  // Update user profile
    app.post('/api/user/profile/upload-picture', auth, uploadProfilePicture, userCntrl.uploadProfilePicture);  // Upload profile picture
+   app.patch("/api/user/profile/update-password", jsonParser, auth, validator.body(userModel.updatePassword), userCntrl.updatePassword);  // Update user password
 }

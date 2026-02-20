@@ -491,6 +491,100 @@ module.exports.updateUserProfile = async (req, res) => {
     }
 };
 
+module.exports.updatePassword = async (req, res) => {
+    console.log("Request body for updatePassword:", req.body);
+    try {
+        const userId = req.userInfo?.id;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please login",
+                data: null
+            });
+        }
+
+        const { currentPassword, newPassword, confirmPassword, confirmNewPassword } = req.body;
+        const passwordConfirmation = confirmPassword || confirmNewPassword;
+
+        if (!currentPassword || !newPassword || !passwordConfirmation) {
+            return res.status(400).json({
+                success: false,
+                message: "All fields are required",
+                data: null
+            });
+        }
+
+        if (newPassword !== passwordConfirmation) {
+            return res.status(400).json({
+                success: false,
+                message: "New password and confirm password do not match",
+                data: null
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: "Password must be at least 6 characters long",
+                data: null
+            });
+        }
+
+        // Get user with password
+        const user = await User.findById(userId).select("+password");
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                data: null
+            });
+        }
+
+        // Compare current password
+        const isMatch = await bcryptServices.comparePassword(
+            currentPassword,
+            user.password
+        );
+
+        if (!isMatch) {
+            return res.status(400).json({
+                success: false,
+                message: "Current password is incorrect",
+                data: null
+            });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcryptServices.generatePassword(newPassword);
+
+        user.password = hashedPassword;
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Password changed successfully",
+            data: null
+        });
+
+    } catch (error) {
+        console.error("Error in changePassword:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            data: null
+        });
+    }
+};
+
+
+
+
+
+
+
+
 /**
  * Upload Profile Picture
  * POST /api/user/profile/upload-picture
