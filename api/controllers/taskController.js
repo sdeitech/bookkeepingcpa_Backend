@@ -26,7 +26,7 @@ exports.createTask = async (req, res) => {
         const createdBy = req.user._id;
 
         // Validate required fields
-        if (!title || !description || !taskType || !dueDate || !assignedTo) {
+        if (!title  || !taskType || !dueDate || !assignedTo) {
             return res.status(400).json({
                 success: false,
                 message: 'Missing required fields'
@@ -160,7 +160,6 @@ exports.createTask = async (req, res) => {
 exports.getTasks = async (req, res) => {
     try {
         const user = req.user;
-        console.log('Get tasks for user:', user._id, 'role:', user.role_id);
         const {
             clientId,
             staffId,

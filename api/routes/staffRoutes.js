@@ -22,4 +22,11 @@ module.exports = function (app, validator) {
         auth.requireStaff, 
         staffCntrl.getStaffDashboard
     );
+
+    // Assigned client profile
+    app.get('/api/staff/client/:clientId/profile',
+        auth,
+        auth.requireStaff,
+        staffCntrl.getClientProfile
+    );
 }

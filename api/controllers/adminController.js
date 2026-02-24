@@ -89,6 +89,15 @@ module.exports.createStaff = async (req, res) => {
 module.exports.getAllStaff = async (req, res) => {
     try {
         const adminId = req.userInfo?.id;
+        const {
+            search,
+            status,
+            assignment,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+        const normalizeValue = (value) => String(value || '').trim().toLowerCase();
+        const normalizeKey = (value) => normalizeValue(value).replace(/[\s_-]/g, '');
 
         // Check if the requesting user is a super admin
         const adminUser = await User.findById(adminId);
@@ -99,14 +108,11 @@ module.exports.getAllStaff = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
-        // Get all staff members (role_id: 2)
-        const staffMembers = await User.aggregate([
-            {
-                $match: { role_id: "2" } // Staff role
-            },
+        const pipeline = [
+            { $match: { role_id: "2" } }, // Staff role
             {
                 $lookup: {
-                    from: "assignclients", // MongoDB collection name (lowercase plural)
+                    from: "assignclients",
                     localField: "_id",
                     foreignField: "staffId",
                     as: "assignedClients"
@@ -114,19 +120,85 @@ module.exports.getAllStaff = async (req, res) => {
             },
             {
                 $addFields: {
-                    clientCount: { $size: "$assignedClients" }
+                    clientCount: { $size: "$assignedClients" },
+                    fullName: {
+                        $trim: {
+                            input: {
+                                $concat: [
+                                    { $ifNull: ["$first_name", ""] },
+                                    " ",
+                                    { $ifNull: ["$last_name", ""] }
+                                ]
+                            }
+                        }
+                    }
                 }
-            },
+            }
+        ];
+
+        // Search by first name, last name, full name, or email
+        if (search) {
+            const searchRegex = new RegExp(search.trim(), 'i');
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { first_name: searchRegex },
+                        { last_name: searchRegex },
+                        { email: searchRegex },
+                        { fullName: searchRegex }
+                    ]
+                }
+            });
+        }
+
+        // Filter by staff status (active/inactive)
+        if (status) {
+            const normalizedStatus = normalizeValue(status);
+            if (normalizedStatus === 'active' || normalizedStatus === 'true' || normalizedStatus === '1') {
+                pipeline.push({ $match: { active: true } });
+            } else if (normalizedStatus === 'inactive' || normalizedStatus === 'false' || normalizedStatus === '0') {
+                pipeline.push({ $match: { active: false } });
+            }
+        }
+
+        // Filter by assignment state: assigned / unassigned / all
+        if (assignment) {
+            const normalizedAssignment = normalizeKey(assignment);
+            if (normalizedAssignment === 'assigned') {
+                pipeline.push({ $match: { clientCount: { $gt: 0 } } });
+            } else if (normalizedAssignment === 'unassigned') {
+                pipeline.push({ $match: { clientCount: 0 } });
+            }
+        }
+
+        // Sorting
+        const normalizedSortBy = normalizeKey(sortBy);
+        const sortDirection = normalizeValue(sortOrder) === 'asc' ? 1 : -1;
+        const sortMap = {
+            name: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
+            fullname: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
+            staffname: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
+            firstname: { first_name: sortDirection },
+            lastname: { last_name: sortDirection },
+            email: { email: sortDirection },
+            assignedclients: { clientCount: sortDirection },
+            clientcount: { clientCount: sortDirection },
+            status: { active: sortDirection },
+            createdat: { createdAt: sortDirection }
+        };
+        const appliedSort = sortMap[normalizedSortBy] || { createdAt: -1 };
+
+        pipeline.push(
+            { $sort: appliedSort },
             {
                 $project: {
                     password: 0,
                     assignedClients: 0
                 }
-            },
-            {
-                $sort: { createdAt: -1 }
             }
-        ]);
+        );
+
+        const staffMembers = await User.aggregate(pipeline);
 
 
         resModel.success = true;
