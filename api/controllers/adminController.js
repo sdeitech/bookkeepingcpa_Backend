@@ -425,7 +425,9 @@ module.exports.getAllClients = async (req, res) => {
         const formattedClients = clients.map(client => ({
             id: client._id,
             email: client.email,
-            name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+            first_name: client.first_name,
+            last_name: client.last_name,
+            // name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
             businessName: client.businessName,
             active: client.active,
             createdAt: client.createdAt
