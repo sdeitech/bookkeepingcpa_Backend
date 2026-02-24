@@ -18,8 +18,9 @@ exports.createTask = async (req, res) => {
             // NEW TEMPLATE FIELDS
             templateId,
             templateName,
-            documentType,
-            actionCategory
+            actionCategory,
+            // NEW: Required documents
+            requiredDocuments
         } = req.body;
 
         const createdBy = req.user._id;
@@ -33,10 +34,10 @@ exports.createTask = async (req, res) => {
         }
 
         // Validate type-specific fields
-        if (taskType === 'DOCUMENT_UPLOAD' && !documentType) {
+        if (taskType === 'DOCUMENT_UPLOAD' && (!requiredDocuments || requiredDocuments.length === 0)) {
             return res.status(400).json({
                 success: false,
-                message: 'documentType is required for DOCUMENT_UPLOAD tasks'
+                message: 'requiredDocuments is required for DOCUMENT_UPLOAD tasks'
             });
         }
 
@@ -109,8 +110,9 @@ exports.createTask = async (req, res) => {
             // NEW TEMPLATE FIELDS
             templateId: templateId || null,
             templateName: templateName || null,
-            documentType: documentType || null,
             actionCategory: actionCategory || null,
+            // NEW: Required documents
+            requiredDocuments: requiredDocuments || [],
             statusHistory: [{
                 status: 'NOT_STARTED',
                 changedBy: createdBy,
@@ -162,16 +164,21 @@ exports.getTasks = async (req, res) => {
         const {
             clientId,
             staffId,
+            assignedBy,
             status,
             taskType,
+            category,
             priority,
             dueDateFrom,
             dueDateTo,
+            dueDateFilter,
             overdue,
+            viewFilter,
+            search,
             page = 1,
             limit = 50,
-            sortBy = 'dueDate',
-            sortOrder = 'asc'
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
         } = req.query;
 
         // Build query based on user role
@@ -199,25 +206,111 @@ exports.getTasks = async (req, res) => {
             query.assignedTo = user._id;
         }
 
-        // Apply common filters
+        // Apply assignedBy filter
+        if (assignedBy) {
+            query.assignedBy = assignedBy;
+        }
+
+        // Apply status filter (supports comma-separated values)
         if (status) {
-            const statuses = status.split(',');
+            const statuses = status.split(',').map(s => s.trim().toUpperCase());
             query.status = { $in: statuses };
         }
 
-        if (taskType) query.taskType = taskType;
-        if (priority) query.priority = priority;
+        // Apply taskType filter
+        if (taskType) {
+            query.taskType = taskType.toUpperCase();
+        }
 
-        if (dueDateFrom || dueDateTo) {
+        // Apply category filter (maps to taskType)
+        if (category && !taskType) {
+            const categoryMap = {
+                'doc_upload': 'DOCUMENT_UPLOAD',
+                'integration': 'INTEGRATION',
+                'action': 'ACTION',
+                'review': 'REVIEW'
+            };
+            
+            if (categoryMap[category]) {
+                query.taskType = categoryMap[category];
+            }
+        }
+
+        // Apply priority filter
+        if (priority) {
+            query.priority = priority.toUpperCase();
+        }
+
+        // Apply view filter (client_tasks, staff_tasks)
+        if (viewFilter) {
+            if (viewFilter === 'client_tasks') {
+                query.assignedToRole = 'CLIENT';
+            } else if (viewFilter === 'staff_tasks') {
+                query.assignedToRole = 'STAFF';
+            }
+        }
+
+        // Apply due date filters
+        if (dueDateFilter && !dueDateFrom && !dueDateTo) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            if (dueDateFilter === 'today') {
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                query.dueDate = { $gte: today, $lt: tomorrow };
+            } else if (dueDateFilter === 'this_week') {
+                const weekStart = new Date(today);
+                const dayOfWeek = today.getDay();
+                const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday
+                weekStart.setDate(today.getDate() + diff);
+                weekStart.setHours(0, 0, 0, 0);
+                
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekStart.getDate() + 7);
+                
+                query.dueDate = { $gte: weekStart, $lt: weekEnd };
+            } else if (dueDateFilter === 'overdue') {
+                query.dueDate = { $lt: today };
+                query.status = { $nin: ['COMPLETED', 'CANCELLED'] };
+            }
+        } else if (dueDateFrom || dueDateTo) {
             query.dueDate = {};
             if (dueDateFrom) query.dueDate.$gte = new Date(dueDateFrom);
             if (dueDateTo) query.dueDate.$lte = new Date(dueDateTo);
         }
 
-        if (overdue === 'true') {
+        // Apply overdue filter (legacy support)
+        if (overdue === 'true' && !dueDateFilter) {
             query.dueDate = { $lt: new Date() };
             query.status = { $nin: ['COMPLETED', 'CANCELLED'] };
         }
+
+        // Apply search filter
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            
+            // Search in task fields
+            const searchConditions = [
+                { title: searchRegex },
+                { description: searchRegex }
+            ];
+            
+            // Combine with existing $or query (for staff role)
+            if (query.$or) {
+                // If $or already exists, wrap it with $and
+                query.$and = [
+                    { $or: query.$or },
+                    { $or: searchConditions }
+                ];
+                delete query.$or;
+            } else {
+                query.$or = searchConditions;
+            }
+        }
+
+        // Get filter options based on the query (before pagination)
+        const filterOptions = await getTaskFilterOptions(query);
 
         // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -274,7 +367,8 @@ exports.getTasks = async (req, res) => {
                     totalItems,
                     itemsPerPage: parseInt(limit)
                 },
-                stats
+                stats,
+                filterOptions
             }
         });
 
@@ -287,6 +381,111 @@ exports.getTasks = async (req, res) => {
         });
     }
 };
+
+/**
+ * Get filter options based on current query
+ * Returns unique values for clients, assignedTo, and assignedBy
+ */
+async function getTaskFilterOptions(query) {
+    try {
+        // Get unique clients with their names
+        const clients = await Task.aggregate([
+            { $match: query },
+            { $group: { _id: "$clientId" } },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "clientInfo"
+                }
+            },
+            {
+                $project: {
+                    value: "$_id",
+                    label: {
+                        $concat: [
+                            { $ifNull: [{ $arrayElemAt: ["$clientInfo.first_name", 0] }, ""] },
+                            " ",
+                            { $ifNull: [{ $arrayElemAt: ["$clientInfo.last_name", 0] }, ""] }
+                        ]
+                    }
+                }
+            },
+            { $match: { label: { $ne: " " } } }, // Filter out empty labels
+            { $sort: { label: 1 } }
+        ]);
+
+        // Get unique assignedTo users with their names
+        const assignedTo = await Task.aggregate([
+            { $match: query },
+            { $group: { _id: "$assignedTo" } },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "userInfo"
+                }
+            },
+            {
+                $project: {
+                    value: "$_id",
+                    label: {
+                        $concat: [
+                            { $ifNull: [{ $arrayElemAt: ["$userInfo.first_name", 0] }, ""] },
+                            " ",
+                            { $ifNull: [{ $arrayElemAt: ["$userInfo.last_name", 0] }, ""] }
+                        ]
+                    }
+                }
+            },
+            { $match: { label: { $ne: " " } } },
+            { $sort: { label: 1 } }
+        ]);
+
+        // Get unique assignedBy users with their names
+        const assignedBy = await Task.aggregate([
+            { $match: query },
+            { $group: { _id: "$assignedBy" } },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "userInfo"
+                }
+            },
+            {
+                $project: {
+                    value: "$_id",
+                    label: {
+                        $concat: [
+                            { $ifNull: [{ $arrayElemAt: ["$userInfo.first_name", 0] }, ""] },
+                            " ",
+                            { $ifNull: [{ $arrayElemAt: ["$userInfo.last_name", 0] }, ""] }
+                        ]
+                    }
+                }
+            },
+            { $match: { label: { $ne: " " } } },
+            { $sort: { label: 1 } }
+        ]);
+
+        return {
+            clients: clients.filter(c => c.value && c.label.trim()),
+            assignedTo: assignedTo.filter(u => u.value && u.label.trim()),
+            assignedBy: assignedBy.filter(u => u.value && u.label.trim())
+        };
+    } catch (error) {
+        console.error('Error getting filter options:', error);
+        return {
+            clients: [],
+            assignedTo: [],
+            assignedBy: []
+        };
+    }
+}
 
 // GET SINGLE TASK
 exports.getTask = async (req, res) => {
@@ -444,6 +643,7 @@ exports.uploadDocument = async (req, res) => {
     try {
         const task = req.task;
         const user = req.user;
+        const { documentType } = req.body; // NEW: Which required document type this file is for
 
         if (!req.file) {
             return res.status(400).json({
@@ -460,20 +660,37 @@ exports.uploadDocument = async (req, res) => {
             fileUrl: req.file.location || req.file.path, // S3 URL or local path
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
+            documentType: documentType || null, // Link to requiredDocuments
             uploadedAt: new Date(),
             uploadedBy: user._id
         };
 
         task.documents.push(document);
+        const uploadedDocId = task.documents[task.documents.length - 1]._id;
 
-        // Auto-change status to PENDING_REVIEW if it's a document task
-        if (task.taskType === 'DOCUMENT_UPLOAD' && task.status === 'IN_PROGRESS') {
+        // NEW: Update requiredDocuments if documentType is provided
+        if (documentType && task.requiredDocuments && task.requiredDocuments.length > 0) {
+            const requiredDoc = task.requiredDocuments.find(rd => rd.type === documentType);
+            if (requiredDoc) {
+                requiredDoc.uploaded = true;
+                requiredDoc.uploadedFiles.push({
+                    documentId: uploadedDocId,
+                    uploadedAt: new Date()
+                });
+            }
+        }
+
+        // Check if all required documents are uploaded
+        const allRequiredUploaded = task.requiredDocuments.every(rd => !rd.isRequired || rd.uploaded);
+
+        // Auto-change status to PENDING_REVIEW if it's a document task and all required docs uploaded
+        if (task.taskType === 'DOCUMENT_UPLOAD' && task.status === 'IN_PROGRESS' && allRequiredUploaded) {
             task.status = 'PENDING_REVIEW';
             task.statusHistory.push({
                 status: 'PENDING_REVIEW',
                 changedBy: user._id,
                 changedAt: new Date(),
-                notes: 'Document uploaded, awaiting review'
+                notes: 'All required documents uploaded, awaiting review'
             });
         }
 
@@ -490,7 +707,9 @@ exports.uploadDocument = async (req, res) => {
                 taskId: task._id,
                 document,
                 task: {
-                    status: task.status
+                    status: task.status,
+                    requiredDocuments: task.requiredDocuments,
+                    allRequiredUploaded
                 }
             }
         });

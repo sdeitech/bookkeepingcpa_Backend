@@ -49,14 +49,38 @@ const taskSchema = new mongoose.Schema(
             maxLength: 200
             // Stored for history/audit purposes
         },
-        // For DOCUMENT_UPLOAD tasks - specific document type
-        documentType: {
-            type: String,
-            default: null,
-            maxLength: 200
-            // e.g., "W-2 Forms", "Bank Statements", "Tax Return"
-            // Makes filtering easier: "Show me all W-2 tasks"
-        },
+        // NEW: Required documents for DOCUMENT_UPLOAD tasks
+        requiredDocuments: [{
+            type: {
+                type: String,
+                required: true,
+                maxLength: 200
+            },
+            isCustom: {
+                type: Boolean,
+                default: false
+                // true = user-defined document type
+                // false = from predefined list
+            },
+            isRequired: {
+                type: Boolean,
+                default: true
+                // true = must be uploaded to complete task
+                // false = optional document
+            },
+            uploaded: {
+                type: Boolean,
+                default: false
+                // true = at least one file uploaded for this type
+            },
+            uploadedFiles: [{
+                documentId: {
+                    type: mongoose.Schema.Types.ObjectId
+                    // Reference to document in documents array
+                },
+                uploadedAt: Date
+            }]
+        }],
         // For ACTION tasks - client or staff action?
         actionCategory: {
             type: String,
@@ -72,6 +96,11 @@ const taskSchema = new mongoose.Schema(
             fileUrl: String,
             fileSize: Number,
             mimeType: String,
+            documentType: {
+                type: String,
+                default: null
+                // Links this file to a requiredDocuments entry
+            },
             uploadedAt: Date,
             uploadedBy: {
                 type: mongoose.Schema.Types.ObjectId,
