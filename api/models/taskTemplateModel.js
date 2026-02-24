@@ -33,12 +33,22 @@ const taskTemplateSchema = new mongoose.Schema(
         
         // TYPE-SPECIFIC FIELDS
         
-        // For DOCUMENT_UPLOAD tasks
-        documentType: {
-            type: String,
-            default: null
-            // e.g., "W-2 Forms", "Bank Statements", "Tax Return"
-        },
+        // NEW: Required documents for DOCUMENT_UPLOAD templates
+        requiredDocuments: [{
+            type: {
+                type: String,
+                required: true,
+                maxLength: 200
+            },
+            isCustom: {
+                type: Boolean,
+                default: false
+            },
+            isRequired: {
+                type: Boolean,
+                default: true
+            }
+        }],
         
         // For INTEGRATION tasks
         integrationType: {
@@ -139,9 +149,9 @@ taskTemplateSchema.index({ usageCount: -1 }); // For "most used" queries
 
 // VALIDATION: Ensure type-specific fields are set correctly
 taskTemplateSchema.pre('save', function(next) {
-    // If DOCUMENT_UPLOAD, must have documentType
-    if (this.taskType === 'DOCUMENT_UPLOAD' && !this.documentType) {
-        return next(new Error('documentType is required for DOCUMENT_UPLOAD templates'));
+    // If DOCUMENT_UPLOAD, must have requiredDocuments
+    if (this.taskType === 'DOCUMENT_UPLOAD' && (!this.requiredDocuments || this.requiredDocuments.length === 0)) {
+        return next(new Error('requiredDocuments is required for DOCUMENT_UPLOAD templates'));
     }
     
     // If INTEGRATION, must have integrationType
