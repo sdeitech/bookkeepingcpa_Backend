@@ -1,6 +1,7 @@
 const bcryptService = require('../services/bcrypt.services');
 const jwtService = require('../services/jwt.services');
 const resModel = require('../lib/resModel');
+const crypto = require('crypto');
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 const AssignClient = require("../models/assignClientsModel");
@@ -10,6 +11,7 @@ const AmazonSeller = require('../models/amazonSellerModel');
 const QuickBooksCompany = require('../models/quickbooksCompanyModel');
 const Notification = require('../models/notification');
 const firebaseRealtime = require('../services/firebase.realtime.service');
+const emailService = require('../services/email.service');
 
 /**
  * Create Staff Member
@@ -82,6 +84,107 @@ module.exports.createStaff = async (req, res) => {
 };
 
 /**
+ * Invite Staff Member
+ * POST /api/admin/invite-staff
+ * Only Super Admin (role_id: 1) can invite staff
+ */
+module.exports.inviteStaff = async (req, res) => {
+    try {
+        const { first_name, last_name, email, phoneNumber } = req.body;
+        const adminId = req.userInfo?.id;
+
+        const adminUser = await User.findById(adminId);
+        if (!adminUser || adminUser.role_id !== '1') {
+            resModel.success = false;
+            resModel.message = "Unauthorized. Only Super Admin can invite staff";
+            resModel.data = null;
+            return res.status(403).json(resModel);
+        }
+
+        const normalizedEmail = email.toLowerCase();
+        const existingUser = await User.findOne({ email: normalizedEmail });
+        const inviteToken = crypto.randomBytes(32).toString('hex');
+        const inviteTokenExpiry = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)); // 7 days
+
+        let staffUser;
+        if (!existingUser) {
+            staffUser = await new User({
+                first_name,
+                last_name,
+                email: normalizedEmail,
+                phoneNumber,
+                role_id: '2',
+                createdBy: adminId,
+                active: false,
+                inviteToken,
+                inviteTokenExpiry
+            }).save();
+        } else {
+            if (existingUser.role_id !== '2') {
+                resModel.success = false;
+                resModel.message = "A non-staff user with this email already exists";
+                resModel.data = null;
+                return res.status(400).json(resModel);
+            }
+
+            // Prevent duplicate invite sends while a previous invite is still valid.
+            if (existingUser.inviteToken && existingUser.inviteTokenExpiry && existingUser.inviteTokenExpiry > new Date()) {
+                resModel.success = false;
+                resModel.message = "Invite already sent for this staff member";
+                resModel.data = {
+                    id: existingUser._id,
+                    email: existingUser.email,
+                    inviteExpiresAt: existingUser.inviteTokenExpiry
+                };
+                return res.status(409).json(resModel);
+            }
+
+            existingUser.first_name = first_name || existingUser.first_name;
+            existingUser.last_name = last_name || existingUser.last_name;
+            existingUser.phoneNumber = phoneNumber || existingUser.phoneNumber;
+            existingUser.active = false;
+            existingUser.createdBy = existingUser.createdBy || adminId;
+            existingUser.inviteToken = inviteToken;
+            existingUser.inviteTokenExpiry = inviteTokenExpiry;
+            await existingUser.save();
+            staffUser = existingUser;
+        }
+
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8082';
+        const inviteUrl = `${frontendUrl}/staff/complete-invite?token=${inviteToken}`;
+
+        const emailResult = await emailService.sendEmail({
+            to: staffUser.email,
+            subject: `${process.env.COMPANY_NAME || 'Bookkeeping CPA'} Staff Invitation`,
+            html: `
+                <p>Hello ${staffUser.first_name || 'there'},</p>
+                <p>You have been invited to join as a staff member.</p>
+                <p>Complete your invitation here:</p>
+                <p><a href="${inviteUrl}">${inviteUrl}</a></p>
+                <p>This invitation expires in 7 days.</p>
+            `,
+            text: `Hello ${staffUser.first_name || 'there'},\n\nYou have been invited to join as a staff member.\n\nComplete your invitation here: ${inviteUrl}\n\nThis invitation expires in 7 days.`
+        });
+
+        resModel.success = true;
+        resModel.message = "Staff invitation sent successfully";
+        resModel.data = {
+            id: staffUser._id,
+            email: staffUser.email,
+            inviteExpiresAt: inviteTokenExpiry,
+            emailSent: Boolean(emailResult?.success)
+        };
+        return res.status(200).json(resModel);
+    } catch (error) {
+        console.error("Error in inviteStaff:", error);
+        resModel.success = false;
+        resModel.message = "Internal Server Error";
+        resModel.data = null;
+        return res.status(500).json(resModel);
+    }
+};
+
+/**
  * Get All Staff Members
  * GET /api/admin/get-all-staff
  * Only Super Admin can view all staff
@@ -93,6 +196,8 @@ module.exports.getAllStaff = async (req, res) => {
             search,
             status,
             assignment,
+            page = 1,
+            limit = 50,
             sortBy = 'createdAt',
             sortOrder = 'desc'
         } = req.query;
@@ -131,6 +236,52 @@ module.exports.getAllStaff = async (req, res) => {
                                 ]
                             }
                         }
+                    },
+                    firstNameLower: { $toLower: { $ifNull: ["$first_name", ""] } },
+                    lastNameLower: { $toLower: { $ifNull: ["$last_name", ""] } },
+                    fullNameLower: {
+                        $toLower: {
+                            $trim: {
+                                input: {
+                                    $concat: [
+                                        { $ifNull: ["$first_name", ""] },
+                                        " ",
+                                        { $ifNull: ["$last_name", ""] }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    staffAccessStatus: {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: { $eq: ["$active", true] },
+                                    then: "active"
+                                },
+                                {
+                                    case: {
+                                        $and: [
+                                            { $eq: ["$active", false] },
+                                            { $ne: ["$inviteToken", null] },
+                                            { $gt: ["$inviteTokenExpiry", new Date()] }
+                                        ]
+                                    },
+                                    then: "invite_pending"
+                                },
+                                {
+                                    case: {
+                                        $and: [
+                                            { $eq: ["$active", false] },
+                                            { $ne: ["$inviteToken", null] },
+                                            { $lte: ["$inviteTokenExpiry", new Date()] }
+                                        ]
+                                    },
+                                    then: "invite_expired"
+                                }
+                            ],
+                            default: "deactivated"
+                        }
                     }
                 }
             }
@@ -151,13 +302,26 @@ module.exports.getAllStaff = async (req, res) => {
             });
         }
 
-        // Filter by staff status (active/inactive)
+        // Filter by staff status
         if (status) {
             const normalizedStatus = normalizeValue(status);
+            const normalizedStatusKey = normalizeKey(status);
+
             if (normalizedStatus === 'active' || normalizedStatus === 'true' || normalizedStatus === '1') {
-                pipeline.push({ $match: { active: true } });
+                pipeline.push({ $match: { staffAccessStatus: 'active' } });
             } else if (normalizedStatus === 'inactive' || normalizedStatus === 'false' || normalizedStatus === '0') {
-                pipeline.push({ $match: { active: false } });
+                // Backward compatibility for old UI filters
+                pipeline.push({
+                    $match: {
+                        staffAccessStatus: { $in: ['invite_pending', 'invite_expired', 'deactivated'] }
+                    }
+                });
+            } else if (normalizedStatusKey === 'invitepending' || normalizedStatusKey === 'pendinginvite') {
+                pipeline.push({ $match: { staffAccessStatus: 'invite_pending' } });
+            } else if (normalizedStatusKey === 'inviteexpired' || normalizedStatusKey === 'expiredinvite') {
+                pipeline.push({ $match: { staffAccessStatus: 'invite_expired' } });
+            } else if (normalizedStatusKey === 'deactivated') {
+                pipeline.push({ $match: { staffAccessStatus: 'deactivated' } });
             }
         }
 
@@ -173,37 +337,65 @@ module.exports.getAllStaff = async (req, res) => {
 
         // Sorting
         const normalizedSortBy = normalizeKey(sortBy);
-        const sortDirection = normalizeValue(sortOrder) === 'asc' ? 1 : -1;
+        const normalizedSortOrder = normalizeValue(sortOrder);
+        const sortDirection = (normalizedSortOrder === 'asc' || normalizedSortOrder === '1' || normalizedSortOrder === 'true') ? 1 : -1;
         const sortMap = {
-            name: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
-            fullname: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
-            staffname: { first_name: sortDirection, last_name: sortDirection, createdAt: -1 },
-            firstname: { first_name: sortDirection },
-            lastname: { last_name: sortDirection },
+            name: { fullNameLower: sortDirection, createdAt: -1 },
+            fullname: { fullNameLower: sortDirection, createdAt: -1 },
+            staffname: { fullNameLower: sortDirection, createdAt: -1 },
+            firstname: { firstNameLower: sortDirection, createdAt: -1 },
+            first_name: { firstNameLower: sortDirection, createdAt: -1 },
+            lastname: { lastNameLower: sortDirection, createdAt: -1 },
+            last_name: { lastNameLower: sortDirection, createdAt: -1 },
             email: { email: sortDirection },
             assignedclients: { clientCount: sortDirection },
             clientcount: { clientCount: sortDirection },
-            status: { active: sortDirection },
+            status: { staffAccessStatus: sortDirection },
             createdat: { createdAt: sortDirection }
         };
         const appliedSort = sortMap[normalizedSortBy] || { createdAt: -1 };
+        const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+        const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+        const skip = (parsedPage - 1) * parsedLimit;
 
-        pipeline.push(
-            { $sort: appliedSort },
-            {
-                $project: {
-                    password: 0,
-                    assignedClients: 0
-                }
+        pipeline.push({
+            $facet: {
+                data: [
+                    { $sort: appliedSort },
+                    { $skip: skip },
+                    { $limit: parsedLimit },
+                    {
+                        $project: {
+                            password: 0,
+                            assignedClients: 0,
+                            firstNameLower: 0,
+                            lastNameLower: 0,
+                            fullNameLower: 0
+                        }
+                    }
+                ],
+                metadata: [
+                    { $count: 'totalItems' }
+                ]
             }
-        );
+        });
 
-        const staffMembers = await User.aggregate(pipeline);
-
+        const aggregateResult = await User.aggregate(pipeline);
+        const staffMembers = aggregateResult?.[0]?.data || [];
+        const totalItems = aggregateResult?.[0]?.metadata?.[0]?.totalItems || 0;
+        const totalPages = Math.max(Math.ceil(totalItems / parsedLimit), 1);
 
         resModel.success = true;
         resModel.message = "Staff members retrieved successfully";
-        resModel.data = staffMembers;
+        resModel.data = {
+            staffMembers,
+            pagination: {
+                currentPage: parsedPage,
+                totalPages,
+                totalItems,
+                itemsPerPage: parsedLimit
+            }
+        };
         res.status(200).json(resModel);
 
     } catch (error) {

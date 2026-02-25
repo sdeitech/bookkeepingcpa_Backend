@@ -4,9 +4,23 @@ const staffCntrl = require('../controllers/staffController');
 
 /* Middleware import starts */
 const auth = require('../middleware/auth');
+const bodyParser = require('body-parser');
 /* Middleware import ends */
 
+/* validate model import starts */
+const staffModel = require('../validate-models/staffModel');
+/* validate model import ends */
+
 module.exports = function (app, validator) {
+    const jsonParser = bodyParser.json();
+
+    // Complete staff invitation (public endpoint)
+    app.post('/api/staff/complete-invite',
+        jsonParser,
+        validator.body(staffModel.completeInvite),
+        staffCntrl.completeInvite
+    );
+
     // All staff routes require authentication and staff role
     
     // Get assigned clients

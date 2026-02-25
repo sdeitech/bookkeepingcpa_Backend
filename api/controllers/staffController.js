@@ -5,6 +5,8 @@ const progressService = require('../services/progress.service');
 const ShopifyStore = require('../models/shopifyStoreModel');
 const AmazonSeller = require('../models/amazonSellerModel');
 const QuickBooksCompany = require('../models/quickbooksCompanyModel');
+const bcryptService = require('../services/bcrypt.services');
+const jwtService = require('../services/jwt.services');
 
 /**
  * Get Clients Assigned to Current Staff Member with Progress
@@ -217,6 +219,66 @@ module.exports.getStaffDashboard = async (req, res) => {
         resModel.message = "Internal Server Error";
         resModel.data = null;
         res.status(500).json(resModel);
+    }
+};
+
+/**
+ * Complete Staff Invitation
+ * POST /api/staff/complete-invite
+ * Public endpoint - validates invite token and sets password
+ */
+module.exports.completeInvite = async (req, res) => {
+    try {
+        const { token, password, confirmPassword, first_name, last_name } = req.body;
+
+        if (password !== confirmPassword) {
+            resModel.success = false;
+            resModel.message = "Password and confirm password must match";
+            resModel.data = null;
+            return res.status(400).json(resModel);
+        }
+
+        const staffUser = await User.findOne({
+            inviteToken: token,
+            inviteTokenExpiry: { $gt: new Date() },
+            role_id: '2'
+        });
+
+        if (!staffUser) {
+            resModel.success = false;
+            resModel.message = "Invalid or expired invite token";
+            resModel.data = null;
+            return res.status(400).json(resModel);
+        }
+
+        const passwordHash = await bcryptService.generatePassword(password);
+        staffUser.password = passwordHash;
+        staffUser.first_name = first_name || staffUser.first_name;
+        staffUser.last_name = last_name || staffUser.last_name;
+        staffUser.inviteToken = null;
+        staffUser.inviteTokenExpiry = null;
+        staffUser.active = true;
+        await staffUser.save();
+
+        const accessToken = await jwtService.issueJwtToken({
+            email: staffUser.email,
+            id: staffUser._id,
+            first_name: staffUser.first_name,
+            role_id: staffUser.role_id
+        });
+
+        staffUser.password = undefined;
+
+        resModel.success = true;
+        resModel.message = "Staff invitation completed successfully";
+        resModel.data = { token: accessToken, user: staffUser };
+        return res.status(200).json(resModel);
+    } catch (error) {
+        console.error("Error in completeInvite:", error);
+        resModel.success = false;
+        resModel.message = "Internal Server Error";
+        resModel.data = null;
+        return res.status(500).json(resModel);
     }
 };
 

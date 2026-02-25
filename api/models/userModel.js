@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema(
     phoneNumber: { type: String, default: null },
     dob: { type: String },
     address: { type: String, default: null },
+    // For staff members, we can use inviteToken and inviteTokenExpiry to manage invitations
+    inviteToken: { type: String, default: null },
+    inviteTokenExpiry: { type: Date, default: null },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
