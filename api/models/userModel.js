@@ -26,6 +26,18 @@ const userSchema = new mongoose.Schema(
       ref: 'User',
       default: null
     }, // For tracking who created staff members
+    
+    // Assignment fields
+    assignedClients: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }], // For staff: array of client IDs they manage
+    
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    } // For clients: staff ID managing them
   },
   { timestamps: true }
 );

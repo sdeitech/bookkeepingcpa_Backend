@@ -1,6 +1,5 @@
 const resModel = require('../lib/resModel');
 const User = require("../models/userModel");
-const AssignClient = require("../models/assignClientsModel");
 const progressService = require('../services/progress.service');
 const ShopifyStore = require('../models/shopifyStoreModel');
 const AmazonSeller = require('../models/amazonSellerModel');
@@ -29,7 +28,9 @@ module.exports.getMyClients = async (req, res) => {
         const sortDirection = normalizeValue(sortOrder) === 'asc' ? 1 : -1;
         
         // Verify the user is a staff member
-        const staffMember = await User.findById(staffId);
+        const staffMember = await User.findById(staffId)
+            .populate('assignedClients', 'first_name last_name email phoneNumber businessName active createdAt');
+        
         if (!staffMember || staffMember.role_id !== '2') {
             resModel.success = false;
             resModel.message = "Unauthorized. Only staff can access this endpoint";
@@ -38,13 +39,7 @@ module.exports.getMyClients = async (req, res) => {
         }
         
         // Get all clients assigned to this staff member
-        const assignments = await AssignClient.find({ staffId })
-            .populate('clientId', 'first_name last_name email phoneNumber businessName active createdAt')
-            .sort({ createdAt: -1 });
-        
-        const clients = assignments
-            .map(assignment => assignment.clientId)
-            .filter(Boolean);
+        const clients = staffMember.assignedClients || [];
         const clientIds = clients.map(client => client._id);
         
         // Get progress data for all assigned clients
@@ -154,15 +149,18 @@ module.exports.getStaffDashboard = async (req, res) => {
         }
         
         // Get assigned clients count
-        const assignedClientsCount = await AssignClient.countDocuments({ staffId });
+        const staffMemberWithClients = await User.findById(staffId).select('assignedClients');
+        const assignedClientsCount = staffMemberWithClients?.assignedClients?.length || 0;
         
         // Get assigned clients details
-        const assignments = await AssignClient.find({ staffId })
-            .populate('clientId', 'first_name last_name email phoneNumber active')
-            .limit(5)
-            .sort({ createdAt: -1 });
+        const staffWithClients = await User.findById(staffId)
+            .populate({
+                path: 'assignedClients',
+                select: 'first_name last_name email phoneNumber active',
+                options: { limit: 5, sort: { createdAt: -1 } }
+            });
         
-        const recentClients = assignments.map(a => a.clientId);
+        const recentClients = staffWithClients?.assignedClients || [];
         const recentClientIds = recentClients.map(client => client._id);
         
         // Get progress for recent clients
@@ -179,9 +177,7 @@ module.exports.getStaffDashboard = async (req, res) => {
         }));
         
         // Calculate progress summary for all assigned clients
-        const allAssignments = await AssignClient.find({ staffId })
-            .populate('clientId', '_id');
-        const allClientIds = allAssignments.map(a => a.clientId._id);
+        const allClientIds = staffMemberWithClients?.assignedClients || [];
         const allProgressMap = await progressService.getMultipleClientsProgress(allClientIds);
         
         // Count progress statuses
@@ -302,8 +298,12 @@ module.exports.getClientProfile = async (req, res) => {
         }
 
         // Ensure this client is assigned to current staff
-        const assignment = await AssignClient.findOne({ staffId, clientId });
-        if (!assignment) {
+        const staffMemberWithClients = await User.findById(staffId).select('assignedClients');
+        const isAssigned = staffMemberWithClients?.assignedClients?.some(
+            id => id.toString() === clientId
+        );
+        
+        if (!isAssigned) {
             resModel.success = false;
             resModel.message = "You can only access profiles of clients assigned to you";
             resModel.data = null;

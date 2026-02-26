@@ -2,6 +2,7 @@ const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const Settings = require('../models/settingsModel');
 const TaskTemplate = require('../models/taskTemplateModel');
+const Document = require('../models/documentModel');
 
 // CREATE TASK
 exports.createTask = async (req, res) => {
@@ -642,7 +643,7 @@ exports.uploadDocument = async (req, res) => {
     try {
         const task = req.task;
         const user = req.user;
-        const { documentType } = req.body; // NEW: Which required document type this file is for
+        const { documentType } = req.body; // Which required document type this file is for
 
         if (!req.file) {
             return res.status(400).json({
@@ -651,29 +652,61 @@ exports.uploadDocument = async (req, res) => {
             });
         }
 
-        // File is already uploaded to S3 by multer middleware
-        // req.file contains: filename, fileUrl, size, mimetype
+        // File is already uploaded by multer middleware
+        const fileUrl = req.file.location || req.file.path; // S3 URL or local path
+        
+        // Determine category based on documentType or default to 'other'
+        const categoryMap = {
+            'tax_return': 'tax_returns',
+            'w2': 'w2_forms',
+            '1099': '1099_forms',
+            'bank_statement': 'bank_statements',
+            'profit_loss': 'profit_loss',
+            'balance_sheet': 'balance_sheets',
+            'invoice': 'invoices',
+            'receipt': 'receipts'
+        };
+        const category = categoryMap[documentType?.toLowerCase()] || 'other';
 
-        const document = {
+        // Create Document record in separate collection
+        const documentRecord = await Document.create({
+            userId: task.clientId,
+            taskId: task._id,
+            fileName: req.file.filename || req.file.originalname,
+            originalName: req.file.originalname,
+            fileType: req.file.mimetype?.split('/')[1] || 'unknown',
+            mimeType: req.file.mimetype,
+            fileSize: req.file.size,
+            localPath: fileUrl,
+            category: category,
+            documentType: documentType || null,
+            uploadedBy: user._id,
+            reviewStatus: 'pending_review',
+            status: 'active'
+        });
+
+        // Also add to task.documents array (for backward compatibility)
+        // TODO: Remove this once frontend is updated to use Document collection
+        const embeddedDocument = {
             fileName: req.file.originalname,
-            fileUrl: req.file.location || req.file.path, // S3 URL or local path
+            fileUrl: fileUrl,
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
-            documentType: documentType || null, // Link to requiredDocuments
+            documentType: documentType || null,
             uploadedAt: new Date(),
             uploadedBy: user._id
         };
 
-        task.documents.push(document);
+        task.documents.push(embeddedDocument);
         const uploadedDocId = task.documents[task.documents.length - 1]._id;
 
-        // NEW: Update requiredDocuments if documentType is provided
+        // Update requiredDocuments if documentType is provided
         if (documentType && task.requiredDocuments && task.requiredDocuments.length > 0) {
             const requiredDoc = task.requiredDocuments.find(rd => rd.type === documentType);
             if (requiredDoc) {
                 requiredDoc.uploaded = true;
                 requiredDoc.uploadedFiles.push({
-                    documentId: uploadedDocId,
+                    documentId: documentRecord._id, // Use Document collection ID
                     uploadedAt: new Date()
                 });
             }
@@ -682,7 +715,7 @@ exports.uploadDocument = async (req, res) => {
         // Check if all required documents are uploaded
         const allRequiredUploaded = task.requiredDocuments.every(rd => !rd.isRequired || rd.uploaded);
 
-        // Auto-change status to PENDING_REVIEW if it's a document task and all required docs uploaded
+        // Auto-change status to PENDING_REVIEW if all required docs uploaded
         if (task.taskType === 'DOCUMENT_UPLOAD' && task.status === 'IN_PROGRESS' && allRequiredUploaded) {
             task.status = 'PENDING_REVIEW';
             task.statusHistory.push({
@@ -694,7 +727,6 @@ exports.uploadDocument = async (req, res) => {
         }
 
         task.updatedAt = new Date();
-
         await task.save();
 
         // TODO: Send notification to staff
@@ -704,7 +736,18 @@ exports.uploadDocument = async (req, res) => {
             message: 'Document uploaded successfully',
             data: {
                 taskId: task._id,
-                document,
+                documentId: documentRecord._id, // Return Document collection ID
+                document: {
+                    _id: documentRecord._id,
+                    fileName: documentRecord.originalName,
+                    fileUrl: documentRecord.localPath,
+                    fileSize: documentRecord.fileSize,
+                    mimeType: documentRecord.mimeType,
+                    documentType: documentRecord.documentType,
+                    uploadedAt: documentRecord.createdAt,
+                    uploadedBy: documentRecord.uploadedBy,
+                    reviewStatus: documentRecord.reviewStatus
+                },
                 task: {
                     status: task.status,
                     requiredDocuments: task.requiredDocuments,
