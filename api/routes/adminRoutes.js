@@ -25,6 +25,14 @@ module.exports = function (app, validator) {
         validator.body(adminModel.createStaff),
         adminCntrl.createStaff
     );
+
+    app.post('/api/admin/invite-staff',
+        jsonParser,
+        auth,
+        auth.requireAdmin,
+        validator.body(adminModel.inviteStaff),
+        adminCntrl.inviteStaff
+    );
     
     app.get('/api/admin/get-all-staff', 
         auth, 
@@ -78,7 +86,7 @@ module.exports = function (app, validator) {
         adminCntrl.getAllAssignments
     );
     
-    app.get('/api/admin/staff-clients/:staffId',
+    app.get('/api/admin/staff-clients/:id',
         auth,
         auth.requireAdmin,
         validator.params(adminModel.commonId),

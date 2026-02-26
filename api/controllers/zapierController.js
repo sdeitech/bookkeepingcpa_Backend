@@ -663,14 +663,14 @@ const pandadocWebhookHandler = async (req, res) => {
                     {
                         status: "SIGNED",
                         signedAt: new Date(data?.action_date || Date.now()),
-                        document_url:data.recipients[0].shared_link
+                        document_url: data.recipients[0].shared_link
                     },
                     { new: true }
                 );
-                
-                await QuestionnaireResponse.findOneAndUpdate({email: letter.email},{
+
+                await QuestionnaireResponse.findOneAndUpdate({ email: letter.email }, {
                     status: "signed",
-                    expiresAt:null
+                    expiresAt: null
                 })
 
 

@@ -30,7 +30,14 @@ module.exports = function (app, validator) {
     auth,
     taskTemplateController.updateTemplate
   );
-  
+
+  app.patch('/api/task-templates/:id/toggle', 
+    jsonParser,
+    auth,
+    taskTemplateController.toggleTemplate
+  );
+
+
   // Delete template (soft delete)
   app.delete('/api/task-templates/:templateId', 
     auth,

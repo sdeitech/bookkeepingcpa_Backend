@@ -260,6 +260,61 @@ exports.updateTemplate = async (req, res) => {
     }
 };
 
+exports.toggleTemplate = async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log("Toggling template with ID:", id);
+        const user = req.user;
+
+        const template = await TaskTemplate.findById(id);
+
+        if (!template) {
+            return res.status(404).json({
+                success: false,
+                message: "Template not found"
+            });
+        }
+
+        // Permission check
+        if (
+            template.createdBy &&
+            template.createdBy.toString() !== user._id.toString() &&
+            user.role_id !== "1"
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: "Only creator or admin can modify this template"
+            });
+        }
+
+        // 🔥 Toggle active field
+        template.active = !template.active;
+
+        await template.save();
+
+        res.status(200).json({
+            success: true,
+            message: `Template ${template.active ? "activated" : "deactivated"} successfully`,
+            data: {
+                _id: template._id,
+                active: template.active
+            }
+        });
+
+    } catch (error) {
+        console.error("Toggle template error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to toggle template",
+            error: error.message
+        });
+    }
+};
+
+
+
+
+
 // DELETE TEMPLATE (Soft delete - mark as inactive)
 exports.deleteTemplate = async (req, res) => {
     try {

@@ -33,6 +33,7 @@ module.exports = function (app, validator) {
     authorize('task', 'update'), 
     taskController.updateTask
   );
+  
 
   app.delete('/api/tasks/:taskId', 
     auth, 

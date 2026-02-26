@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const taskSchema = new mongoose.Schema(
     {
         title: { type: String, required: true, maxLength: 200, trim: true },
-        description: { type: String, required: true, maxLength: 2000, trim: true },
+        description: { type: String, maxLength: 2000, trim: true },
         taskType: {
             type: String,
             enum: ['DOCUMENT_UPLOAD', 'INTEGRATION', 'ACTION', 'REVIEW'],
