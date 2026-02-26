@@ -80,12 +80,6 @@ module.exports = function (app, validator) {
         adminCntrl.unassignClient
     );
     
-    app.get('/api/admin/get-assignments',
-        auth,
-        auth.requireAdmin,
-        adminCntrl.getAllAssignments
-    );
-    
     app.get('/api/admin/staff-clients/:id',
         auth,
         auth.requireAdmin,

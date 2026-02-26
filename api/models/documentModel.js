@@ -128,6 +128,21 @@ const documentSchema = new mongoose.Schema({
     required: true
   },
 
+  // Task reference (for task-related documents)
+  taskId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Task',
+    default: null,
+    index: true
+  },
+  
+  // Document type (links to task's requiredDocuments)
+  documentType: {
+    type: String,
+    default: null,
+    maxlength: 200
+  },
+
   // Deletion tracking (for soft delete)
   deletedAt: Date,
   deletedBy: {
@@ -180,6 +195,8 @@ documentSchema.index({ userId: 1, createdAt: -1 });
 documentSchema.index({ category: 1, taxYear: 1 });
 documentSchema.index({ tags: 1 });
 documentSchema.index({ 'sharedWith.userId': 1 });
+documentSchema.index({ taskId: 1, documentType: 1 }); // For task documents
+documentSchema.index({ taskId: 1, reviewStatus: 1 }); // For task approval workflow
 
 // Virtual for download URL
 documentSchema.virtual('downloadUrl').get(function() {

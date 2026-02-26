@@ -4,7 +4,6 @@ const resModel = require('../lib/resModel');
 const crypto = require('crypto');
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
-const AssignClient = require("../models/assignClientsModel");
 const progressService = require('../services/progress.service');
 const ShopifyStore = require('../models/shopifyStoreModel');
 const AmazonSeller = require('../models/amazonSellerModel');
@@ -833,26 +832,39 @@ module.exports.assignClient = async (req, res) => {
         }
 
         // Check if assignment already exists
-        const existingAssignment = await AssignClient.findOne({ clientId, staffId });
-        if (existingAssignment) {
+        if (staffMember.assignedClients && staffMember.assignedClients.includes(clientId)) {
             resModel.success = false;
             resModel.message = "Client is already assigned to this staff member";
             resModel.data = null;
             return res.status(400).json(resModel);
         }
 
-        // Create new assignment
-        const newAssignment = new AssignClient({
-            clientId,
-            staffId
-        });
+        // Use transaction to ensure both updates succeed or fail together
+        const session = await User.startSession();
+        session.startTransaction();
 
-        const savedAssignment = await newAssignment.save();
+        try {
+            // Add client to staff's assignedClients array
+            await User.updateOne(
+                { _id: staffId, role_id: '2' },
+                { $addToSet: { assignedClients: clientId } },
+                { session }
+            );
 
-        // Populate the response with staff and client details
-        const populatedAssignment = await AssignClient.findById(savedAssignment._id)
-            .populate('staffId', 'first_name last_name email')
-            .populate('clientId', 'first_name last_name email');
+            // Set staff in client's assignedTo field
+            await User.updateOne(
+                { _id: clientId, role_id: '3' },
+                { $set: { assignedTo: staffId } },
+                { session }
+            );
+
+            await session.commitTransaction();
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
+        }
 
         // ─────────────────────────────────────────────
         // NOTIFICATION: Notify Staff Member
@@ -871,15 +883,11 @@ module.exports.assignClient = async (req, res) => {
             actionType: 'navigate',
             actionLabel: 'View Client',
             metadata: {
-                assignmentId: savedAssignment._id.toString(),
                 clientId: clientId.toString(),
                 clientName: `${client.first_name} ${client.last_name}`,
                 clientEmail: client.email,
                 assignedBy: adminId.toString(),
                 assignedByName: `${adminUser.first_name} ${adminUser.last_name}`,
-            },
-            relatedEntities: {
-                assignmentId: savedAssignment._id
             },
             isRead: false,
             status: 'sent',
@@ -917,15 +925,11 @@ module.exports.assignClient = async (req, res) => {
             actionType: 'navigate',
             actionLabel: 'Contact Support',
             metadata: {
-                assignmentId: savedAssignment._id.toString(),
                 staffId: staffId.toString(),
                 staffName: `${staffMember.first_name} ${staffMember.last_name}`,
                 staffEmail: staffMember.email,
                 assignedBy: adminId.toString(),
                 assignedByName: `${adminUser.first_name} ${adminUser.last_name}`,
-            },
-            relatedEntities: {
-                assignmentId: savedAssignment._id
             },
             isRead: false,
             status: 'sent',
@@ -948,7 +952,12 @@ module.exports.assignClient = async (req, res) => {
 
         resModel.success = true;
         resModel.message = "Client assigned to staff successfully";
-        resModel.data = populatedAssignment;
+        resModel.data = {
+            staffId,
+            clientId,
+            staffName: `${staffMember.first_name} ${staffMember.last_name}`,
+            clientName: `${client.first_name} ${client.last_name}`
+        };
         res.status(200).json(resModel);
 
     } catch (error) {
@@ -979,14 +988,31 @@ module.exports.unassignClient = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
-        // Find and delete the assignment
-        const assignment = await AssignClient.findOneAndDelete({ clientId, staffId });
+        // Use transaction to ensure both updates succeed or fail together
+        const session = await User.startSession();
+        session.startTransaction();
 
-        if (!assignment) {
-            resModel.success = false;
-            resModel.message = "Assignment not found";
-            resModel.data = null;
-            return res.status(404).json(resModel);
+        try {
+            // Remove client from staff's assignedClients array
+            await User.updateOne(
+                { _id: staffId, role_id: '2' },
+                { $pull: { assignedClients: clientId } },
+                { session }
+            );
+
+            // Clear staff in client's assignedTo field
+            await User.updateOne(
+                { _id: clientId, role_id: '3' },
+                { $set: { assignedTo: null } },
+                { session }
+            );
+
+            await session.commitTransaction();
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
         }
 
         resModel.success = true;
@@ -996,44 +1022,6 @@ module.exports.unassignClient = async (req, res) => {
 
     } catch (error) {
         console.error("Error in unassignClient:", error);
-        resModel.success = false;
-        resModel.message = "Internal Server Error";
-        resModel.data = null;
-        res.status(500).json(resModel);
-    }
-};
-
-/**
- * Get All Client Assignments
- * GET /api/admin/get-assignments
- * Only Super Admin can view all assignments
- */
-module.exports.getAllAssignments = async (req, res) => {
-    try {
-        const adminId = req.userInfo?.id;
-
-        // Check if the requesting user is a super admin
-        const adminUser = await User.findById(adminId);
-        if (!adminUser || adminUser.role_id !== '1') {
-            resModel.success = false;
-            resModel.message = "Unauthorized. Only Super Admin can view assignments";
-            resModel.data = null;
-            return res.status(403).json(resModel);
-        }
-
-        // Get all assignments with populated data
-        const assignments = await AssignClient.find()
-            .populate('staffId', 'first_name last_name email active')
-            .populate('clientId', 'first_name last_name email active')
-            .sort({ createdAt: -1 });
-
-        resModel.success = true;
-        resModel.message = "Assignments retrieved successfully";
-        resModel.data = assignments;
-        res.status(200).json(resModel);
-
-    } catch (error) {
-        console.error("Error in getAllAssignments:", error);
         resModel.success = false;
         resModel.message = "Internal Server Error";
         resModel.data = null;
@@ -1061,20 +1049,16 @@ module.exports.getStaffClients = async (req, res) => {
         }
 
         // Verify target user is a valid staff member
-        const staffMember = await User.findById(id).select('first_name last_name email phoneNumber active createdAt updatedAt role_id');
+        const staffMember = await User.findById(id)
+            .select('first_name last_name email phoneNumber active createdAt updatedAt role_id')
+            .populate('assignedClients', 'first_name last_name email phoneNumber businessName active createdAt');
+        
         if (!staffMember || staffMember.role_id !== '2') {
             resModel.success = false;
             resModel.message = "Staff member not found";
             resModel.data = null;
             return res.status(404).json(resModel);
         }
-
-        // Get all clients assigned to this staff member
-        const assignments = await AssignClient.find({ staffId: id })
-            .populate('clientId', 'first_name last_name email phoneNumber active createdAt')
-            .sort({ createdAt: -1 });
-
-        const clients = assignments.map(assignment => assignment.clientId);
 
         resModel.success = true;
         resModel.message = "Staff details with assigned clients retrieved successfully";
@@ -1089,7 +1073,7 @@ module.exports.getStaffClients = async (req, res) => {
                 createdAt: staffMember.createdAt,
                 updatedAt: staffMember.updatedAt
             },
-            clients
+            clients: staffMember.assignedClients || []
         };
         res.status(200).json(resModel);
 
@@ -1120,39 +1104,33 @@ module.exports.getClientsWithAssignments = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
-        // Get all clients
+        // Get all clients with their assigned staff
         const clients = await User.find({ role_id: '3' })
-            .select('first_name last_name email phoneNumber active createdAt')
+            .select('first_name last_name email phoneNumber businessName active createdAt assignedTo')
+            .populate('assignedTo', 'first_name last_name email')
             .sort({ createdAt: -1 });
-
-        // Get all assignments
-        const assignments = await AssignClient.find()
-            .populate('staffId', 'first_name last_name email');
-
-        // Create a map of client assignments
-        const assignmentMap = {};
-        assignments.forEach(assignment => {
-            assignmentMap[assignment.clientId.toString()] = {
-                staffId: assignment.staffId._id,
-                staffName: `${assignment.staffId.first_name} ${assignment.staffId.last_name}`,
-                staffEmail: assignment.staffId.email
-            };
-        });
 
         // Get progress data for all clients
         const clientIds = clients.map(client => client._id);
         const progressMap = await progressService.getMultipleClientsProgress(clientIds);
 
         // Combine clients with their assignment info and progress
-        const clientsWithAssignments = clients.map(client => ({
-            ...client.toObject(),
-            assignedStaff: assignmentMap[client._id.toString()] || null,
-            progress: progressMap[client._id.toString()] || {
-                onboarding: { completed: false, step: null },
-                subscription: { status: 'none', planName: null, interval: null, expiresAt: null },
-                integrations: { amazon: false, shopify: false }
-            }
-        }));
+        const clientsWithAssignments = clients.map(client => {
+            const clientObj = client.toObject();
+            return {
+                ...clientObj,
+                assignedStaff: clientObj.assignedTo ? {
+                    staffId: clientObj.assignedTo._id,
+                    staffName: `${clientObj.assignedTo.first_name} ${clientObj.assignedTo.last_name}`,
+                    staffEmail: clientObj.assignedTo.email
+                } : null,
+                progress: progressMap[client._id.toString()] || {
+                    onboarding: { completed: false, step: null },
+                    subscription: { status: 'none', planName: null, interval: null, expiresAt: null },
+                    integrations: { amazon: false, shopify: false }
+                }
+            };
+        });
 
         resModel.success = true;
         resModel.message = "Clients with assignments and progress retrieved successfully";
