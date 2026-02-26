@@ -241,6 +241,10 @@ module.exports.completeInvite = async (req, res) => {
         const staffUser = await User.findOne({
             inviteToken: token,
             inviteTokenExpiry: { $gt: new Date() },
+            $or: [
+                { inviteStatus: 'pending' },
+                { inviteStatus: null }
+            ],
             role_id: '2'
         });
 
@@ -257,6 +261,7 @@ module.exports.completeInvite = async (req, res) => {
         staffUser.last_name = last_name || staffUser.last_name;
         staffUser.inviteToken = null;
         staffUser.inviteTokenExpiry = null;
+        staffUser.inviteStatus = 'accepted';
         staffUser.active = true;
         await staffUser.save();
 

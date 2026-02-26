@@ -53,7 +53,8 @@ module.exports.createStaff = async (req, res) => {
             phoneNumber,
             role_id: '2', // Staff role
             createdBy: adminId,
-            active: true
+            active: true,
+            inviteStatus: 'accepted'
         };
 
         const newStaff = new User(staffInfo);
@@ -117,7 +118,8 @@ module.exports.inviteStaff = async (req, res) => {
                 createdBy: adminId,
                 active: false,
                 inviteToken,
-                inviteTokenExpiry
+                inviteTokenExpiry,
+                inviteStatus: 'pending'
             }).save();
         } else {
             if (existingUser.role_id !== '2') {
@@ -128,7 +130,13 @@ module.exports.inviteStaff = async (req, res) => {
             }
 
             // Prevent duplicate invite sends while a previous invite is still valid.
-            if (existingUser.inviteToken && existingUser.inviteTokenExpiry && existingUser.inviteTokenExpiry > new Date()) {
+            const hasLivePendingInvite =
+                existingUser.inviteToken &&
+                existingUser.inviteTokenExpiry &&
+                existingUser.inviteTokenExpiry > new Date() &&
+                (existingUser.inviteStatus === 'pending' || !existingUser.inviteStatus);
+
+            if (hasLivePendingInvite) {
                 resModel.success = false;
                 resModel.message = "Invite already sent for this staff member";
                 resModel.data = {
@@ -146,6 +154,7 @@ module.exports.inviteStaff = async (req, res) => {
             existingUser.createdBy = existingUser.createdBy || adminId;
             existingUser.inviteToken = inviteToken;
             existingUser.inviteTokenExpiry = inviteTokenExpiry;
+            existingUser.inviteStatus = 'pending';
             await existingUser.save();
             staffUser = existingUser;
         }
@@ -263,7 +272,12 @@ module.exports.getAllStaff = async (req, res) => {
                                     case: {
                                         $and: [
                                             { $eq: ["$active", false] },
-                                            { $ne: ["$inviteToken", null] },
+                                            {
+                                                $or: [
+                                                    { $eq: ["$inviteStatus", "pending"] },
+                                                    { $eq: ["$inviteStatus", null] }
+                                                ]
+                                            },
                                             { $gt: ["$inviteTokenExpiry", new Date()] }
                                         ]
                                     },
@@ -273,7 +287,12 @@ module.exports.getAllStaff = async (req, res) => {
                                     case: {
                                         $and: [
                                             { $eq: ["$active", false] },
-                                            { $ne: ["$inviteToken", null] },
+                                            {
+                                                $or: [
+                                                    { $eq: ["$inviteStatus", "pending"] },
+                                                    { $eq: ["$inviteStatus", null] }
+                                                ]
+                                            },
                                             { $lte: ["$inviteTokenExpiry", new Date()] }
                                         ]
                                     },
@@ -499,8 +518,11 @@ module.exports.deactivateStaff = async (req, res) => {
             return res.status(404).json(resModel);
         }
 
-        // Soft delete - just set active to false
+        // Soft delete - keep account disabled and clear any invite flow state
         staffMember.active = false;
+        staffMember.inviteToken = null;
+        staffMember.inviteTokenExpiry = null;
+        staffMember.inviteStatus = 'none';
         await staffMember.save();
 
         resModel.success = true;
@@ -545,8 +567,11 @@ module.exports.reactivateStaff = async (req, res) => {
             return res.status(404).json(resModel);
         }
 
-        // Reactivate - set active to true
+        // Reactivate and clear any stale invite flow state
         staffMember.active = true;
+        staffMember.inviteToken = null;
+        staffMember.inviteTokenExpiry = null;
+        staffMember.inviteStatus = 'none';
         await staffMember.save();
 
         resModel.success = true;
@@ -1018,12 +1043,12 @@ module.exports.getAllAssignments = async (req, res) => {
 
 /**
  * Get Clients Assigned to a Staff Member
- * GET /api/admin/staff-clients/:staffId
+ * GET /api/admin/staff-clients/:id
  * Super Admin can view any staff's clients
  */
 module.exports.getStaffClients = async (req, res) => {
     try {
-        const { staffId } = req.params;
+        const { id } = req.params;
         const adminId = req.userInfo?.id;
 
         // Check if the requesting user is a super admin
@@ -1035,16 +1060,37 @@ module.exports.getStaffClients = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
+        // Verify target user is a valid staff member
+        const staffMember = await User.findById(id).select('first_name last_name email phoneNumber active createdAt updatedAt role_id');
+        if (!staffMember || staffMember.role_id !== '2') {
+            resModel.success = false;
+            resModel.message = "Staff member not found";
+            resModel.data = null;
+            return res.status(404).json(resModel);
+        }
+
         // Get all clients assigned to this staff member
-        const assignments = await AssignClient.find({ staffId })
+        const assignments = await AssignClient.find({ staffId: id })
             .populate('clientId', 'first_name last_name email phoneNumber active createdAt')
             .sort({ createdAt: -1 });
 
         const clients = assignments.map(assignment => assignment.clientId);
 
         resModel.success = true;
-        resModel.message = "Staff clients retrieved successfully";
-        resModel.data = clients;
+        resModel.message = "Staff details with assigned clients retrieved successfully";
+        resModel.data = {
+            staff: {
+                _id: staffMember._id,
+                first_name: staffMember.first_name,
+                last_name: staffMember.last_name,
+                email: staffMember.email,
+                phoneNumber: staffMember.phoneNumber,
+                active: staffMember.active,
+                createdAt: staffMember.createdAt,
+                updatedAt: staffMember.updatedAt
+            },
+            clients
+        };
         res.status(200).json(resModel);
 
     } catch (error) {

@@ -86,7 +86,7 @@ module.exports = function (app, validator) {
         adminCntrl.getAllAssignments
     );
     
-    app.get('/api/admin/staff-clients/:staffId',
+    app.get('/api/admin/staff-clients/:id',
         auth,
         auth.requireAdmin,
         validator.params(adminModel.commonId),
