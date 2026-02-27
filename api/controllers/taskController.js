@@ -2,7 +2,7 @@ const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const Settings = require('../models/settingsModel');
 const TaskTemplate = require('../models/taskTemplateModel');
-const Document = require('../models/documentModel');
+const TaskDocument = require('../models/taskDocumentModel');
 
 // CREATE TASK
 exports.createTask = async (req, res) => {
@@ -502,6 +502,15 @@ exports.getTask = async (req, res) => {
         await task.populate('helpRequests.requestedBy', 'first_name last_name email');
         await task.populate('helpRequests.resolvedBy', 'first_name last_name email');
 
+        // Fetch documents from TaskDocument collection
+        const documents = await TaskDocument.find({
+            taskId: task._id,
+            status: 'active'
+        })
+        .populate('uploadedBy', 'first_name last_name email')
+        .populate('reviewedBy', 'first_name last_name email')
+        .sort({ createdAt: -1 });
+
         // Calculate days until due
         const now = new Date();
         const dueDate = new Date(task.dueDate);
@@ -512,6 +521,7 @@ exports.getTask = async (req, res) => {
             success: true,
             data: {
                 ...task.toObject(),
+                documents: documents, // From TaskDocument collection
                 daysUntilDue,
                 isOverdue
             }
@@ -643,7 +653,7 @@ exports.uploadDocument = async (req, res) => {
     try {
         const task = req.task;
         const user = req.user;
-        const { documentType } = req.body; // Which required document type this file is for
+        const { documentType } = req.body;
 
         if (!req.file) {
             return res.status(400).json({
@@ -652,61 +662,30 @@ exports.uploadDocument = async (req, res) => {
             });
         }
 
-        // File is already uploaded by multer middleware
-        const fileUrl = req.file.location || req.file.path; // S3 URL or local path
-        
-        // Determine category based on documentType or default to 'other'
-        const categoryMap = {
-            'tax_return': 'tax_returns',
-            'w2': 'w2_forms',
-            '1099': '1099_forms',
-            'bank_statement': 'bank_statements',
-            'profit_loss': 'profit_loss',
-            'balance_sheet': 'balance_sheets',
-            'invoice': 'invoices',
-            'receipt': 'receipts'
-        };
-        const category = categoryMap[documentType?.toLowerCase()] || 'other';
+        const fileUrl = req.file.location || req.file.path;
 
-        // Create Document record in separate collection
-        const documentRecord = await Document.create({
-            userId: task.clientId,
+        // Create TaskDocument record
+        const taskDocument = await TaskDocument.create({
             taskId: task._id,
+            documentType: documentType,
+            userId: task.clientId,
             fileName: req.file.filename || req.file.originalname,
             originalName: req.file.originalname,
-            fileType: req.file.mimetype?.split('/')[1] || 'unknown',
-            mimeType: req.file.mimetype,
             fileSize: req.file.size,
+            mimeType: req.file.mimetype,
             localPath: fileUrl,
-            category: category,
-            documentType: documentType || null,
             uploadedBy: user._id,
             reviewStatus: 'pending_review',
             status: 'active'
         });
 
-        // Also add to task.documents array (for backward compatibility)
-        // TODO: Remove this once frontend is updated to use Document collection
-        const embeddedDocument = {
-            fileName: req.file.originalname,
-            fileUrl: fileUrl,
-            fileSize: req.file.size,
-            mimeType: req.file.mimetype,
-            documentType: documentType || null,
-            uploadedAt: new Date(),
-            uploadedBy: user._id
-        };
-
-        task.documents.push(embeddedDocument);
-        const uploadedDocId = task.documents[task.documents.length - 1]._id;
-
-        // Update requiredDocuments if documentType is provided
+        // Update requiredDocuments metadata
         if (documentType && task.requiredDocuments && task.requiredDocuments.length > 0) {
             const requiredDoc = task.requiredDocuments.find(rd => rd.type === documentType);
             if (requiredDoc) {
                 requiredDoc.uploaded = true;
                 requiredDoc.uploadedFiles.push({
-                    documentId: documentRecord._id, // Use Document collection ID
+                    documentId: taskDocument._id,
                     uploadedAt: new Date()
                 });
             }
@@ -729,24 +708,22 @@ exports.uploadDocument = async (req, res) => {
         task.updatedAt = new Date();
         await task.save();
 
-        // TODO: Send notification to staff
-
         res.status(200).json({
             success: true,
             message: 'Document uploaded successfully',
             data: {
                 taskId: task._id,
-                documentId: documentRecord._id, // Return Document collection ID
+                documentId: taskDocument._id,
                 document: {
-                    _id: documentRecord._id,
-                    fileName: documentRecord.originalName,
-                    fileUrl: documentRecord.localPath,
-                    fileSize: documentRecord.fileSize,
-                    mimeType: documentRecord.mimeType,
-                    documentType: documentRecord.documentType,
-                    uploadedAt: documentRecord.createdAt,
-                    uploadedBy: documentRecord.uploadedBy,
-                    reviewStatus: documentRecord.reviewStatus
+                    _id: taskDocument._id,
+                    fileName: taskDocument.originalName,
+                    fileUrl: taskDocument.localPath,
+                    fileSize: taskDocument.fileSize,
+                    mimeType: taskDocument.mimeType,
+                    documentType: taskDocument.documentType,
+                    uploadedAt: taskDocument.createdAt,
+                    uploadedBy: taskDocument.uploadedBy,
+                    reviewStatus: taskDocument.reviewStatus
                 },
                 task: {
                     status: task.status,
@@ -773,6 +750,22 @@ exports.approveTask = async (req, res) => {
         const user = req.user;
         const { reviewNotes } = req.body;
 
+        // Check if all REQUIRED documents are approved
+        if (task.requiredDocuments && task.requiredDocuments.length > 0) {
+            const requiredTypes = task.requiredDocuments
+                .filter(rd => rd.isRequired)
+                .map(rd => rd.type);
+            
+            const allApproved = await TaskDocument.areAllApproved(task._id, requiredTypes);
+            
+            if (!allApproved) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cannot approve task - not all required documents are approved'
+                });
+            }
+        }
+
         // Update task
         task.status = 'COMPLETED';
         task.completedAt = new Date();
@@ -792,7 +785,16 @@ exports.approveTask = async (req, res) => {
 
         await task.save();
 
-        // TODO: Send notification to client
+        // Update all task documents to approved
+        await TaskDocument.updateMany(
+            { taskId: task._id, status: 'active' },
+            {
+                reviewStatus: 'approved',
+                reviewedBy: user._id,
+                reviewedAt: new Date(),
+                reviewNotes: reviewNotes || ''
+            }
+        );
 
         res.status(200).json({
             success: true,
@@ -846,7 +848,16 @@ exports.rejectTask = async (req, res) => {
 
         await task.save();
 
-        // TODO: Send notification to client
+        // Update all task documents to rejected
+        await TaskDocument.updateMany(
+            { taskId: task._id, status: 'active' },
+            {
+                reviewStatus: 'rejected',
+                reviewedBy: user._id,
+                reviewedAt: new Date(),
+                reviewNotes: rejectionReason
+            }
+        );
 
         res.status(200).json({
             success: true,
