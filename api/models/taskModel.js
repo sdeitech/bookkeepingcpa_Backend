@@ -90,23 +90,6 @@ const taskSchema = new mongoose.Schema(
             // STAFF_ACTION = internal staff work
             // Helps with filtering and notifications
         },
-        // DOCUMENT UPLOAD (for DOCUMENT_UPLOAD type)
-        documents: [{
-            fileName: String,
-            fileUrl: String,
-            fileSize: Number,
-            mimeType: String,
-            documentType: {
-                type: String,
-                default: null
-                // Links this file to a requiredDocuments entry
-            },
-            uploadedAt: Date,
-            uploadedBy: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'User'
-            }
-        }],
         // INTEGRATION (for INTEGRATION type)
         integrationType: {
             type: String,
