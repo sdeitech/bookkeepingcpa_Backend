@@ -1039,7 +1039,23 @@ module.exports.getStaffClients = async (req, res) => {
         const { id } = req.params;
         const adminId = req.userInfo?.id;
 
-        // Check if the requesting user is a super admin
+        const {
+            search,
+            page = 1,
+            limit = 20,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+
+        const normalizeValue = (value) => String(value || '').trim().toLowerCase();
+        const normalizedSearch = normalizeValue(search);
+        const normalizedSortBy = normalizeValue(sortBy);
+        const sortDirection = normalizeValue(sortOrder) === 'asc' ? 1 : -1;
+
+        const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+        const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+
+        // Check if requesting user is super admin
         const adminUser = await User.findById(adminId);
         if (!adminUser || adminUser.role_id !== '1') {
             resModel.success = false;
@@ -1048,17 +1064,63 @@ module.exports.getStaffClients = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
-        // Verify target user is a valid staff member
+        // Verify staff member
         const staffMember = await User.findById(id)
             .select('first_name last_name email phoneNumber active createdAt updatedAt role_id')
             .populate('assignedClients', 'first_name last_name email phoneNumber businessName active createdAt');
-        
+
         if (!staffMember || staffMember.role_id !== '2') {
             resModel.success = false;
             resModel.message = "Staff member not found";
             resModel.data = null;
             return res.status(404).json(resModel);
         }
+
+        let clients = staffMember.assignedClients || [];
+
+        // 🔍 SEARCH FILTER
+        if (normalizedSearch) {
+            clients = clients.filter((client) => {
+                const fullName = `${client.first_name || ''} ${client.last_name || ''}`.trim().toLowerCase();
+
+                return (
+                    (client.first_name || '').toLowerCase().includes(normalizedSearch) ||
+                    (client.last_name || '').toLowerCase().includes(normalizedSearch) ||
+                    fullName.includes(normalizedSearch) ||
+                    (client.email || '').toLowerCase().includes(normalizedSearch) ||
+                    (client.phoneNumber || '').toLowerCase().includes(normalizedSearch) ||
+                    (client.businessName || '').toLowerCase().includes(normalizedSearch)
+                );
+            });
+        }
+
+        // 🔃 SORTING
+        clients.sort((a, b) => {
+            if (normalizedSortBy === 'name') {
+                const aName = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
+                const bName = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
+                return aName.localeCompare(bName) * sortDirection;
+            }
+
+            if (normalizedSortBy === 'email') {
+                return (a.email || '').localeCompare(b.email || '') * sortDirection;
+            }
+
+            if (normalizedSortBy === 'status') {
+                return ((a.active === true ? 1 : 0) - (b.active === true ? 1 : 0)) * sortDirection;
+            }
+
+            const aCreated = new Date(a.createdAt || 0).getTime();
+            const bCreated = new Date(b.createdAt || 0).getTime();
+            return (aCreated - bCreated) * sortDirection;
+        });
+
+        // 📄 PAGINATION
+        const totalItems = clients.length;
+        const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / limitNumber);
+        const skip = (pageNumber - 1) * limitNumber;
+
+        const paginatedClients = clients.slice(skip, skip + limitNumber);
 
         resModel.success = true;
         resModel.message = "Staff details with assigned clients retrieved successfully";
@@ -1073,8 +1135,20 @@ module.exports.getStaffClients = async (req, res) => {
                 createdAt: staffMember.createdAt,
                 updatedAt: staffMember.updatedAt
             },
-            clients: staffMember.assignedClients || []
+            clients: paginatedClients,
+            pagination: {
+                totalItems,
+                totalPages,
+                currentPage: pageNumber,
+                perPage: limitNumber
+            },
+            filters: {
+                search: normalizedSearch || '',
+                sortBy: normalizedSortBy || 'createdat',
+                sortOrder: sortDirection === 1 ? 'asc' : 'desc'
+            }
         };
+
         res.status(200).json(resModel);
 
     } catch (error) {
@@ -1085,7 +1159,6 @@ module.exports.getStaffClients = async (req, res) => {
         res.status(500).json(resModel);
     }
 };
-
 /**
  * Get All Clients with Assignment Status and Progress
  * GET /api/admin/clients-with-assignments

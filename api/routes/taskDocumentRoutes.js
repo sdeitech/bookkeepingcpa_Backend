@@ -12,6 +12,12 @@ module.exports = function (app, validator) {
     taskDocumentController.getTaskDocuments
   );
 
+  app.get('/api/all-task-documents',
+    auth,
+    taskDocumentController.getAllDocuments
+  );
+
+
   // Approve document
   app.patch('/api/task-documents/:documentId/approve',
     jsonParser,

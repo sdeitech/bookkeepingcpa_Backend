@@ -64,13 +64,122 @@ const taskDocumentController = {
     }
   },
 
+
+  getAllDocuments: async (req, res) => {
+    try {
+      const userId = req.user._id;
+  
+      const {
+        status = "all",
+        search = "",
+        fromDate,
+        toDate,
+        page = 1,
+        limit = 12,
+      } = req.query;
+  
+      const pageNumber = Math.max(parseInt(page) || 1, 1);
+      const limitNumber = Math.min(Math.max(parseInt(limit) || 12, 1), 100);
+  
+      // ✅ Check user
+      const user = await User.findById(userId);
+  
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+  
+      // ✅ Admin only
+      if (user.role_id !== "1") {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. Admin only.",
+        });
+      }
+  
+      // ================= FILTER BUILD =================
+  
+      let filter = { status: "active" };
+  
+      // Status filter
+      if (status !== "all") {
+        filter.reviewStatus = status;
+      }
+  
+      // Date filter
+      if (fromDate || toDate) {
+        filter.createdAt = {};
+        if (fromDate) {
+          filter.createdAt.$gte = new Date(fromDate);
+        }
+        if (toDate) {
+          filter.createdAt.$lte = new Date(toDate);
+        }
+      }
+  
+      // Search filter
+      if (search) {
+        filter.$or = [
+          { fileName: { $regex: search, $options: "i" } },
+          { originalName: { $regex: search, $options: "i" } },
+          { documentType: { $regex: search, $options: "i" } },
+        ];
+      }
+  
+      // ================= COUNT =================
+  
+      const totalItems = await TaskDocument.countDocuments(filter);
+      const totalPages =
+        totalItems === 0 ? 0 : Math.ceil(totalItems / limitNumber);
+  
+      // ================= FETCH =================
+  
+      const documents = await TaskDocument.find(filter)
+        .populate("taskId", "title")
+        .populate("uploadedBy", "first_name last_name email")
+        .populate("reviewedBy", "first_name last_name email")
+        .sort({ createdAt: -1 })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber);
+  
+      return res.status(200).json({
+        success: true,
+        message: "All documents retrieved successfully",
+        data: {
+          documents,
+          pagination: {
+            totalItems,
+            totalPages,
+            currentPage: pageNumber,
+            perPage: limitNumber,
+          },
+          filters: {
+            status,
+            search,
+            fromDate,
+            toDate,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Get all documents error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve documents",
+        error: error.message,
+      });
+    }
+  },
+
+
   /**
    * Approve a document
    * PATCH /api/task-documents/:documentId/approve
    */
   approveDocument: async (req, res) => {
     try {
-      console.log('asd asda this working ????')
       const { documentId } = req.params;
       const { reviewNotes } = req.body;
       const userId = req.user._id;
@@ -89,7 +198,7 @@ const taskDocumentController = {
       // Approve document
       await document.approve(userId, reviewNotes || '');
 
-      console.log('this working ???? 123')
+   
 
       // Check if all required documents are now approved
       const task = await Task.findById(document.taskId);
