@@ -3,6 +3,8 @@ const User = require('../models/userModel');
 const Settings = require('../models/settingsModel');
 const TaskTemplate = require('../models/taskTemplateModel');
 const TaskDocument = require('../models/taskDocumentModel');
+const { PutObjectCommand } = require("@aws-sdk/client-s3");
+const s3 = require("../config/s3");
 
 // CREATE TASK
 exports.createTask = async (req, res) => {
@@ -646,7 +648,7 @@ exports.updateTaskStatus = async (req, res) => {
     }
 };
 
-// UPLOAD DOCUMENT
+// UPLOAD DOCUMENT- S3
 exports.uploadDocument = async (req, res) => {
     try {
         const task = req.task;
@@ -660,25 +662,36 @@ exports.uploadDocument = async (req, res) => {
             });
         }
 
-        const fileUrl = req.file.location || req.file.path;
+        // 🔥 Generate S3 file key
+        const fileKey = `documents/${task._id}/${Date.now()}-${req.file.originalname}`;
+
+        // 🔥 Upload to S3 (PRIVATE)
+        await s3.send(
+            new PutObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: fileKey,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            })
+        );
 
         // Create TaskDocument record
         const taskDocument = await TaskDocument.create({
             taskId: task._id,
             documentType: documentType,
             userId: task.clientId,
-            fileName: req.file.filename || req.file.originalname,
+            fileName: req.file.originalname,
             originalName: req.file.originalname,
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
-            localPath: fileUrl,
+            localPath: fileKey, // 🔥 Store fileKey instead of local path
             uploadedBy: user._id,
             reviewStatus: 'pending_review',
             status: 'active'
         });
 
-        // Update requiredDocuments metadata
-        if (documentType && task.requiredDocuments && task.requiredDocuments.length > 0) {
+        // ===== Your Existing Logic (unchanged) =====
+        if (documentType && task.requiredDocuments?.length > 0) {
             const requiredDoc = task.requiredDocuments.find(rd => rd.type === documentType);
             if (requiredDoc) {
                 requiredDoc.uploaded = true;
@@ -689,11 +702,15 @@ exports.uploadDocument = async (req, res) => {
             }
         }
 
-        // Check if all required documents are uploaded
-        const allRequiredUploaded = task.requiredDocuments.every(rd => !rd.isRequired || rd.uploaded);
+        const allRequiredUploaded = task.requiredDocuments.every(
+            rd => !rd.isRequired || rd.uploaded
+        );
 
-        // Auto-change status to PENDING_REVIEW if all required docs uploaded
-        if (task.taskType === 'DOCUMENT_UPLOAD' && task.status === 'IN_PROGRESS' && allRequiredUploaded) {
+        if (
+            task.taskType === 'DOCUMENT_UPLOAD' &&
+            task.status === 'IN_PROGRESS' &&
+            allRequiredUploaded
+        ) {
             task.status = 'PENDING_REVIEW';
             task.statusHistory.push({
                 status: 'PENDING_REVIEW',
@@ -711,23 +728,7 @@ exports.uploadDocument = async (req, res) => {
             message: 'Document uploaded successfully',
             data: {
                 taskId: task._id,
-                documentId: taskDocument._id,
-                document: {
-                    _id: taskDocument._id,
-                    fileName: taskDocument.originalName,
-                    fileUrl: taskDocument.localPath,
-                    fileSize: taskDocument.fileSize,
-                    mimeType: taskDocument.mimeType,
-                    documentType: taskDocument.documentType,
-                    uploadedAt: taskDocument.createdAt,
-                    uploadedBy: taskDocument.uploadedBy,
-                    reviewStatus: taskDocument.reviewStatus
-                },
-                task: {
-                    status: task.status,
-                    requiredDocuments: task.requiredDocuments,
-                    allRequiredUploaded
-                }
+                documentId: taskDocument._id
             }
         });
 
