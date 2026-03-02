@@ -175,13 +175,14 @@ const taskDocumentController = {
 
 
   /**
-   * Approve a document
+   * Approve a document or undo approval
    * PATCH /api/task-documents/:documentId/approve
+   * Body: { reviewNotes: string, undo: boolean }
    */
   approveDocument: async (req, res) => {
     try {
       const { documentId } = req.params;
-      const { reviewNotes } = req.body;
+      const { reviewNotes, undo = false } = req.body;
       const userId = req.user._id;
 
       const document = await TaskDocument.findById(documentId);
@@ -193,16 +194,52 @@ const taskDocumentController = {
         });
       }
 
+      // Verify user has permission to approve (admin or staff assigned to client)
+      const user = await User.findById(userId);
+      const task = await Task.findById(document.taskId);
+      
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: 'Associated task not found'
+        });
+      }
+      
+      // Only admin or staff assigned to this client can approve
+      const isAdmin = user.role_id === '1';
+      const isAssignedStaff = user.role_id === '2' && (
+        task.staffId?.toString() === userId ||
+        user.assignedClients?.some(clientId => clientId.toString() === task.clientId.toString())
+      );
+      
+      if (!isAdmin && !isAssignedStaff) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to approve this document'
+        });
+      }
 
+      // Handle undo action
+      if (undo) {
+        // Reset to pending review
+        document.reviewStatus = 'pending_review';
+        document.reviewedBy = null;
+        document.reviewedAt = null;
+        document.reviewNotes = null;
+        await document.save();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Document approval undone successfully',
+          data: document
+        });
+      }
 
       // Approve document
       await document.approve(userId, reviewNotes || '');
 
-   
-
       // Check if all required documents are now approved
-      const task = await Task.findById(document.taskId);
-      if (task && task.requiredDocuments) {
+      if (task.requiredDocuments) {
         const requiredTypes = task.requiredDocuments
           .filter(rd => rd.isRequired)
           .map(rd => rd.type);
@@ -240,21 +277,15 @@ const taskDocumentController = {
   },
 
   /**
-   * Reject a document
+   * Reject a document or undo rejection
    * PATCH /api/task-documents/:documentId/reject
+   * Body: { rejectionReason: string, undo: boolean }
    */
   rejectDocument: async (req, res) => {
     try {
       const { documentId } = req.params;
-      const { rejectionReason } = req.body;
+      const { rejectionReason, undo = false } = req.body;
       const userId = req.user._id;
-
-      if (!rejectionReason) {
-        return res.status(400).json({
-          success: false,
-          message: 'Rejection reason is required'
-        });
-      }
 
       const document = await TaskDocument.findById(documentId);
 
@@ -265,12 +296,60 @@ const taskDocumentController = {
         });
       }
 
+      // Verify user has permission to reject (admin or staff assigned to client)
+      const user = await User.findById(userId);
+      const task = await Task.findById(document.taskId);
+      
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: 'Associated task not found'
+        });
+      }
+      
+      // Only admin or staff assigned to this client can reject
+      const isAdmin = user.role_id === '1';
+      const isAssignedStaff = user.role_id === '2' && (
+        task.staffId?.toString() === userId ||
+        user.assignedClients?.some(clientId => clientId.toString() === task.clientId.toString())
+      );
+      
+      if (!isAdmin && !isAssignedStaff) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to reject this document'
+        });
+      }
+
+      // Handle undo action
+      if (undo) {
+        // Reset to pending review
+        document.reviewStatus = 'pending_review';
+        document.reviewedBy = null;
+        document.reviewedAt = null;
+        document.reviewNotes = null;
+        await document.save();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Document rejection undone successfully',
+          data: document
+        });
+      }
+
+      // Validate rejection reason for actual rejection
+      if (!rejectionReason) {
+        return res.status(400).json({
+          success: false,
+          message: 'Rejection reason is required'
+        });
+      }
+
       // Reject document
       await document.reject(userId, rejectionReason);
 
       // Update task status to NEEDS_REVISION
-      const task = await Task.findById(document.taskId);
-      if (task && task.status !== 'NEEDS_REVISION') {
+      if (task.status !== 'NEEDS_REVISION') {
         task.status = 'NEEDS_REVISION';
         task.statusHistory.push({
           status: 'NEEDS_REVISION',
@@ -354,6 +433,102 @@ const taskDocumentController = {
       return res.status(500).json({
         success: false,
         message: 'Failed to download document',
+        error: error.message
+      });
+    }
+  },
+
+  /**
+   * View document (inline display for viewer)
+   * GET /api/task-documents/:documentId/view?auth=token
+   */
+  viewDocument: async (req, res) => {
+    try {
+      const { documentId } = req.params;
+      
+      // Get user ID from auth middleware (req.user) or from query token
+      let userId = req.user?._id;
+      
+      // If no user from middleware, try to get from query token
+      if (!userId && req.query.auth) {
+        const jwt = require('jsonwebtoken');
+        try {
+          const decoded = jwt.verify(req.query.auth, process.env.JWT_SECRET);
+          userId = decoded.id;
+        } catch (error) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid or expired token'
+          });
+        }
+      }
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+
+      const document = await TaskDocument.findById(documentId);
+
+      if (!document || document.status === 'deleted') {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      // Verify access
+      const task = await Task.findById(document.taskId);
+      const user = await User.findById(userId);
+      
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      const hasAccess = 
+        user.role_id === '1' || // Admin
+        task.assignedTo.toString() === userId || // Assigned to user
+        task.staffId?.toString() === userId || // Staff
+        task.clientId.toString() === userId; // Client
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied'
+        });
+      }
+
+      // Check if file exists
+      if (!fs.existsSync(document.localPath)) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found on server'
+        });
+      }
+
+      // Set headers for inline viewing
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${document.originalName}"`);
+      res.setHeader('Content-Length', document.fileSize);
+      // Allow embedding in iframes
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      // Cache for 1 hour
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+
+      // Stream the file
+      const fileStream = fs.createReadStream(document.localPath);
+      fileStream.pipe(res);
+
+    } catch (error) {
+      console.error('View error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to view document',
         error: error.message
       });
     }

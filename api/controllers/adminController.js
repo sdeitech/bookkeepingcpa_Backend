@@ -224,16 +224,14 @@ module.exports.getAllStaff = async (req, res) => {
         const pipeline = [
             { $match: { role_id: "2" } }, // Staff role
             {
-                $lookup: {
-                    from: "assignclients",
-                    localField: "_id",
-                    foreignField: "staffId",
-                    as: "assignedClients"
-                }
-            },
-            {
                 $addFields: {
-                    clientCount: { $size: "$assignedClients" },
+                    clientCount: { 
+                        $cond: {
+                            if: { $isArray: "$assignedClients" },
+                            then: { $size: "$assignedClients" },
+                            else: 0
+                        }
+                    },
                     fullName: {
                         $trim: {
                             input: {

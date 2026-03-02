@@ -74,9 +74,8 @@ exports.createTask = async (req, res) => {
             assignedToRole = 'CLIENT';
             finalClientId = assignedTo;
             // Find staff assigned to this client
-            const AssignClient = require('../models/assignClientsModel');
-            const assignment = await AssignClient.findOne({ clientId: assignedTo });
-            finalStaffId = assignment ? assignment.staffId : req.user._id;
+            const client = await User.findById(assignedTo).select('assignedTo');
+            finalStaffId = client?.assignedTo || req.user._id;
         } else if (assignee.role_id === '2') { // STAFF
             assignedToRole = 'STAFF';
             finalStaffId = assignedTo;
@@ -190,9 +189,8 @@ exports.getTasks = async (req, res) => {
             if (staffId) query.staffId = staffId;
         } else if (user.role_id === '2') { // STAFF
             // Staff can see tasks for their assigned clients OR tasks assigned to them
-            const AssignClient = require('../models/assignClientsModel');
-            const assignments = await AssignClient.find({ staffId: user._id }).select('clientId');
-            const clientIds = assignments.map(a => a.clientId);
+            const staffMember = await User.findById(user._id).select('assignedClients');
+            const clientIds = staffMember?.assignedClients || [];
 
             query.$or = [
                 { clientId: { $in: clientIds } },

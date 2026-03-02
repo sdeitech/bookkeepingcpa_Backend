@@ -91,7 +91,25 @@ const taskDocumentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
-  }
+  },
+
+  // TODO: Audit Trail - Implement when needed
+  // Track all review status changes for audit purposes
+  // reviewHistory: [{
+  //   reviewStatus: {
+  //     type: String,
+  //     enum: ['pending_review', 'approved', 'rejected']
+  //   },
+  //   changedBy: {
+  //     type: mongoose.Schema.Types.ObjectId,
+  //     ref: 'User'
+  //   },
+  //   changedAt: {
+  //     type: Date,
+  //     default: Date.now
+  //   },
+  //   notes: String  // Approval notes or rejection reason
+  // }]
 }, {
   timestamps: true // Adds createdAt and updatedAt automatically
 });
