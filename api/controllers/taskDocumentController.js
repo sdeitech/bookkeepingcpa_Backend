@@ -3,6 +3,9 @@ const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const path = require('path');
 const fs = require('fs');
+const { GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const s3 = require('../config/s3');
 
 const taskDocumentController = {
   /**
@@ -16,7 +19,7 @@ const taskDocumentController = {
 
       // Verify task exists and user has access
       const task = await Task.findById(taskId);
-      
+
       if (!task) {
         return res.status(404).json({
           success: false,
@@ -26,7 +29,7 @@ const taskDocumentController = {
 
       // Check access (admin, assigned staff, or task owner)
       const user = await User.findById(userId);
-      const hasAccess = 
+      const hasAccess =
         user.role_id === '1' || // Admin
         task.assignedTo.toString() === userId || // Assigned to user
         task.staffId?.toString() === userId || // Staff assigned to client
@@ -44,9 +47,9 @@ const taskDocumentController = {
         taskId,
         status: 'active'
       })
-      .populate('uploadedBy', 'first_name last_name email')
-      .populate('reviewedBy', 'first_name last_name email')
-      .sort({ createdAt: -1 });
+        .populate('uploadedBy', 'first_name last_name email')
+        .populate('reviewedBy', 'first_name last_name email')
+        .sort({ createdAt: -1 });
 
       return res.status(200).json({
         success: true,
@@ -82,8 +85,8 @@ const taskDocumentController = {
       const pageNumber = Math.max(parseInt(page) || 1, 1);
       const limitNumber = Math.min(Math.max(parseInt(limit) || 12, 1), 100);
   
-      // ✅ Check user
-      const user = await User.findById(userId);
+      // ================= AUTH =================
+      const user = await User.findById(userId).select("role_id");
   
       if (!user) {
         return res.status(401).json({
@@ -91,21 +94,32 @@ const taskDocumentController = {
           message: "Unauthorized",
         });
       }
+      
+      const isAdmin = user.role_id === "1";
+      const isOwner = !isAdmin && user.role_id === "3";
   
-      // ✅ Admin only
-      if (user.role_id !== "1") {
+      if (!isAdmin && !isOwner) {
         return res.status(403).json({
           success: false,
-          message: "Access denied. Admin only.",
+          message: "Access denied",
         });
       }
   
-      // ================= FILTER BUILD =================
+      // ================= FILTER =================
   
-      let filter = { status: "active" };
-
-      if (clientId) {
-        filter.userId = clientId;
+      const filter = {
+        status: "active",
+      };
+  
+      // 🔐 ROLE BASED ACCESS CONTROL
+      if (isAdmin) {
+        // Admin can filter by client
+        if (clientId) {
+          filter.userId = clientId;
+        }
+      } else {
+        // Client can ONLY see their documents
+        filter.userId = userId;
       }
   
       // Status filter
@@ -116,16 +130,18 @@ const taskDocumentController = {
       // Date filter
       if (fromDate || toDate) {
         filter.createdAt = {};
+  
         if (fromDate) {
-          filter.createdAt.$gte = new Date(fromDate);
+          filter.createdAt.$gte = new Date(`${fromDate}T00:00:00.000Z`);
         }
+  
         if (toDate) {
-          filter.createdAt.$lte = new Date(toDate);
+          filter.createdAt.$lte = new Date(`${toDate}T23:59:59.999Z`);
         }
       }
   
       // Search filter
-      if (search) {
+      if (search.trim()) {
         filter.$or = [
           { fileName: { $regex: search, $options: "i" } },
           { originalName: { $regex: search, $options: "i" } },
@@ -133,25 +149,26 @@ const taskDocumentController = {
         ];
       }
   
-      // ================= COUNT =================
+      // ================= QUERY =================
   
-      const totalItems = await TaskDocument.countDocuments(filter);
+      const [totalItems, documents] = await Promise.all([
+        TaskDocument.countDocuments(filter),
+        TaskDocument.find(filter)
+          .populate("taskId", "title")
+          .populate("uploadedBy", "first_name last_name email")
+          .populate("reviewedBy", "first_name last_name email")
+          .sort({ createdAt: -1 })
+          .skip((pageNumber - 1) * limitNumber)
+          .limit(limitNumber)
+          .lean(),
+      ]);
+  
       const totalPages =
         totalItems === 0 ? 0 : Math.ceil(totalItems / limitNumber);
   
-      // ================= FETCH =================
-  
-      const documents = await TaskDocument.find(filter)
-        .populate("taskId", "title")
-        .populate("uploadedBy", "first_name last_name email")
-        .populate("reviewedBy", "first_name last_name email")
-        .sort({ createdAt: -1 })
-        .skip((pageNumber - 1) * limitNumber)
-        .limit(limitNumber);
-  
       return res.status(200).json({
         success: true,
-        message: "All documents retrieved successfully",
+        message: "Documents retrieved successfully",
         data: {
           documents,
           pagination: {
@@ -160,16 +177,11 @@ const taskDocumentController = {
             currentPage: pageNumber,
             perPage: limitNumber,
           },
-          filters: {
-            status,
-            search,
-            fromDate,
-            toDate,
-          },
+          role: isAdmin ? "admin" : "client",
         },
       });
     } catch (error) {
-      console.error("Get all documents error:", error);
+      console.error("Get documents error:", error);
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve documents",
@@ -202,21 +214,21 @@ const taskDocumentController = {
       // Verify user has permission to approve (admin or staff assigned to client)
       const user = await User.findById(userId);
       const task = await Task.findById(document.taskId);
-      
+
       if (!task) {
         return res.status(404).json({
           success: false,
           message: 'Associated task not found'
         });
       }
-      
+
       // Only admin or staff assigned to this client can approve
       const isAdmin = user.role_id === '1';
       const isAssignedStaff = user.role_id === '2' && (
         task.staffId?.toString() === userId ||
         user.assignedClients?.some(clientId => clientId.toString() === task.clientId.toString())
       );
-      
+
       if (!isAdmin && !isAssignedStaff) {
         return res.status(403).json({
           success: false,
@@ -248,9 +260,9 @@ const taskDocumentController = {
         const requiredTypes = task.requiredDocuments
           .filter(rd => rd.isRequired)
           .map(rd => rd.type);
-        
+
         const allApproved = await TaskDocument.areAllApproved(task._id, requiredTypes);
-        
+
         // Auto-complete task if all required docs approved
         if (allApproved && task.status === 'PENDING_REVIEW') {
           task.status = 'COMPLETED';
@@ -304,21 +316,21 @@ const taskDocumentController = {
       // Verify user has permission to reject (admin or staff assigned to client)
       const user = await User.findById(userId);
       const task = await Task.findById(document.taskId);
-      
+
       if (!task) {
         return res.status(404).json({
           success: false,
           message: 'Associated task not found'
         });
       }
-      
+
       // Only admin or staff assigned to this client can reject
       const isAdmin = user.role_id === '1';
       const isAssignedStaff = user.role_id === '2' && (
         task.staffId?.toString() === userId ||
         user.assignedClients?.some(clientId => clientId.toString() === task.clientId.toString())
       );
-      
+
       if (!isAdmin && !isAssignedStaff) {
         return res.status(403).json({
           success: false,
@@ -389,60 +401,61 @@ const taskDocumentController = {
     try {
       const { documentId } = req.params;
       const userId = req.user._id;
-
+  
       const document = await TaskDocument.findById(documentId);
-
-      if (!document || document.status === 'deleted') {
+  
+      if (!document || document.status === "deleted") {
         return res.status(404).json({
           success: false,
-          message: 'Document not found'
+          message: "Document not found",
         });
       }
-
-      // Verify access
+  
+      // 🔐 Permission Check
       const task = await Task.findById(document.taskId);
       const user = await User.findById(userId);
-      
-      const hasAccess = 
-        user.role_id === '1' || // Admin
-        task.assignedTo.toString() === userId || // Assigned to user
-        task.staffId?.toString() === userId || // Staff
-        task.clientId.toString() === userId; // Client
-
+  
+      const hasAccess =
+        user.role_id === "1" || // Admin
+        task.assignedTo?.toString() === userId.toString() ||
+        task.staffId?.toString() === userId.toString() ||
+        task.clientId?.toString() === userId.toString();
+  
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
-          message: 'Access denied'
+          message: "Access denied",
         });
       }
-
-      // Check if file exists
-      if (!fs.existsSync(document.localPath)) {
-        return res.status(404).json({
-          success: false,
-          message: 'File not found on server'
-        });
-      }
-
-      // Set headers for file download
-      res.setHeader('Content-Type', document.mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${document.originalName}"`);
-      res.setHeader('Content-Length', document.fileSize);
-
-      // Stream the file
-      const fileStream = fs.createReadStream(document.localPath);
-      fileStream.pipe(res);
-
+  
+      // 🔥 Get File From S3
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: document.localPath, // This should store S3 key
+      });
+  
+      const s3Response = await s3.send(command);
+  
+      // Set headers for forced download
+      res.setHeader("Content-Type", document.mimeType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${document.originalName}"`
+      );
+      res.setHeader("Content-Length", document.fileSize);
+  
+      // Stream S3 file directly to client
+      s3Response.Body.pipe(res);
+  
     } catch (error) {
-      console.error('Download error:', error);
+      console.error("Download error:", error);
       return res.status(500).json({
         success: false,
-        message: 'Failed to download document',
-        error: error.message
+        message: "Failed to download document",
+        error: error.message,
       });
     }
   },
-
   /**
    * View document (inline display for viewer)
    * GET /api/task-documents/:documentId/view?auth=token
@@ -450,10 +463,10 @@ const taskDocumentController = {
   viewDocument: async (req, res) => {
     try {
       const { documentId } = req.params;
-      
+
       // Get user ID from auth middleware (req.user) or from query token
       let userId = req.user?._id;
-      
+
       // If no user from middleware, try to get from query token
       if (!userId && req.query.auth) {
         const jwt = require('jsonwebtoken');
@@ -467,7 +480,7 @@ const taskDocumentController = {
           });
         }
       }
-      
+
       if (!userId) {
         return res.status(401).json({
           success: false,
@@ -487,15 +500,15 @@ const taskDocumentController = {
       // Verify access
       const task = await Task.findById(document.taskId);
       const user = await User.findById(userId);
-      
+
       if (!user) {
         return res.status(401).json({
           success: false,
           message: 'User not found'
         });
       }
-      
-      const hasAccess = 
+
+      const hasAccess =
         user.role_id === '1' || // Admin
         task.assignedTo.toString() === userId || // Assigned to user
         task.staffId?.toString() === userId || // Staff
@@ -572,6 +585,51 @@ const taskDocumentController = {
         message: 'Failed to delete document',
         error: error.message
       });
+    }
+  },
+
+
+  getDocumentUrl: async (req, res) => {
+    try {
+      const { documentId } = req.params;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+  
+      const document = await TaskDocument.findById(documentId);
+    
+  
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+  
+      // 🔐 Permission Rules
+      const isAdmin = user.role === "ADMIN";
+      const isOwner = document.userId.toString() === user._id.toString();
+  
+      if (!isAdmin && !isOwner) {
+        return res.status(403).json({ message: "Unauthorized access" });
+      }
+  
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: document.localPath,
+      });
+  
+      const signedUrl = await getSignedUrl(s3, command, {
+        expiresIn: 600 //10 mins
+      });
+  
+      res.json({
+        signedUrl,
+        expiresAt: Date.now() + 600 * 1000 // 10 mins in ms
+      });
+  
+    } catch (error) {
+      console.error("Signed URL error:", error);
+      res.status(500).json({ message: "Failed to generate URL" });
     }
   }
 };

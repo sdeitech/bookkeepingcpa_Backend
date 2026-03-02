@@ -48,4 +48,9 @@ module.exports = function (app, validator) {
     auth,
     taskDocumentController.deleteDocument
   );
+
+  app.get('/api/documents/:documentId/url',
+    auth,
+    taskDocumentController.getDocumentUrl
+  );
 };
