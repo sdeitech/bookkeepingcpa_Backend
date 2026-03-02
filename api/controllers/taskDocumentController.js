@@ -3,6 +3,7 @@ const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const path = require('path');
 const fs = require('fs');
+const notificationHelper = require('../helpers/notificationHelper');
 const { GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const s3 = require('../config/s3');
@@ -277,6 +278,20 @@ const taskDocumentController = {
         }
       }
 
+      // Send notification to client
+      try {
+        await task.populate('clientId', 'first_name last_name email');
+        const client = task.clientId;
+        const reviewer = await User.findById(userId);
+        
+        if (client && reviewer) {
+          await notificationHelper.notifyDocumentApproved(document, task, client, reviewer);
+        }
+      } catch (notifError) {
+        console.error('Notification error:', notifError);
+        // Don't fail the request if notification fails
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Document approved successfully',
@@ -375,6 +390,20 @@ const taskDocumentController = {
           notes: `Document rejected: ${rejectionReason}`
         });
         await task.save();
+      }
+
+      // Send notification to client
+      try {
+        await task.populate('clientId', 'first_name last_name email');
+        const client = task.clientId;
+        const reviewer = await User.findById(userId);
+        
+        if (client && reviewer) {
+          await notificationHelper.notifyDocumentRejected(document, task, client, reviewer, rejectionReason);
+        }
+      } catch (notifError) {
+        console.error('Notification error:', notifError);
+        // Don't fail the request if notification fails
       }
 
       return res.status(200).json({

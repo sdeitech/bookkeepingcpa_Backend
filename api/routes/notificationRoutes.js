@@ -2,7 +2,6 @@
  * Notification Routes - Robust Implementation
  * Following the established pattern from userRoutes and adminRoutes
  */
-
 const notificationService = require('../services/notificationService');
 const Notification = require('../models/notification');
 const User = require('../models/userModel');
@@ -138,9 +137,7 @@ module.exports = function (app, validator) {
    * Poll for notification updates (efficient polling endpoint)
    * GET /api/notifications/poll
    */
-  app.get('/api/notifications/poll', 
-    auth, 
-    mapUserInfo,
+  app.get('/api/notifications/poll', auth, mapUserInfo,
     async (req, res) => {
       try {
         const lastCheck = req.query.lastCheck || new Date(Date.now() - 60000);
@@ -167,27 +164,31 @@ module.exports = function (app, validator) {
   /**
    * Get notifications for the authenticated user
    * GET /api/notifications
+   * UPDATED: Now supports both old auth middleware and new authenticate middleware
    */
   app.get('/api/notifications',
     auth,
     mapUserInfo,
-    validator.query(getNotificationsSchema),
     async (req, res) => {
       try {
-        const result = await notificationService.getUserNotifications(
-          req.user._id,
-          req.query
-        );
+        const userId = req.user._id;
+        const { page = 1, limit = 20, unreadOnly = false } = req.query;
 
-        res.json({
+        const result = await notificationService.getUserNotifications(userId, {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          unreadOnly: unreadOnly === 'true'
+        });
+
+        return res.status(200).json({
           success: true,
           data: result
         });
       } catch (error) {
-        console.error('Error fetching notifications:', error);
-        res.status(500).json({
+        console.error('Get notifications error:', error);
+        return res.status(500).json({
           success: false,
-          message: 'Failed to fetch notifications',
+          message: 'Failed to get notifications',
           error: error.message
         });
       }
@@ -197,28 +198,27 @@ module.exports = function (app, validator) {
   /**
    * Get unread notification count
    * GET /api/notifications/unread-count
+   * UPDATED: Now supports new authenticate middleware
    */
-  app.get('/api/notifications/unread-count',
-    auth,
-    mapUserInfo,
-    async (req, res) => {
-      try {
-        const count = await Notification.getUnreadCount(req.user._id);
-        
-        res.json({
-          success: true,
-          data: { count }
-        });
-      } catch (error) {
-        console.error('Error getting unread count:', error);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to get unread count',
-          error: error.message
-        });
-      }
+  app.get('/api/notifications/unread-count', auth, mapUserInfo, async (req, res) => {
+    try {
+      const userId = req.user._id;
+      
+      const count = await Notification.getUnreadCount(userId);
+
+      return res.status(200).json({
+        success: true,
+        data: { count }
+      });
+    } catch (error) {
+      console.error('Get unread count error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to get unread count',
+        error: error.message
+      });
     }
-  );
+  });
 
   /**
    * Get notification preferences
@@ -230,7 +230,7 @@ module.exports = function (app, validator) {
     async (req, res) => {
       try {
         const user = await User.findById(req.user._id).select('notificationPreferences');
-        
+
         const defaultPreferences = {
           email: {
             announcements: true,
@@ -252,9 +252,9 @@ module.exports = function (app, validator) {
           browserNotifications: false,
           pollingInterval: 10000
         };
-        
+
         const preferences = user?.notificationPreferences || defaultPreferences;
-        
+
         res.json({
           success: true,
           data: preferences
@@ -307,7 +307,7 @@ module.exports = function (app, validator) {
             }
           }
         ]);
-        
+
         res.json({
           success: true,
           data: stats[0] || {
@@ -379,7 +379,7 @@ module.exports = function (app, validator) {
     auth,
     checkRole(['admin', 'staff']),
     mapUserInfo,
-    validator.body(createNotificationSchema),
+    ...(validator ? [validator.body(createNotificationSchema)] : []),
     async (req, res) => {
       try {
         const notificationData = {
@@ -390,7 +390,7 @@ module.exports = function (app, validator) {
         };
 
         const notification = await notificationService.createNotification(notificationData);
-        
+
         res.status(201).json({
           success: true,
           message: 'Notification created successfully',
@@ -416,7 +416,7 @@ module.exports = function (app, validator) {
     auth,
     checkRole(['admin']),
     mapUserInfo,
-    validator.body(broadcastSchema),
+    ...(validator ? [validator.body(broadcastSchema)] : []),
     async (req, res) => {
       try {
         const broadcastData = {
@@ -432,7 +432,7 @@ module.exports = function (app, validator) {
         }
 
         const notifications = await notificationService.broadcastNotification(broadcastData);
-        
+
         res.status(201).json({
           success: true,
           message: `Broadcast sent to ${notifications.length} users`,
@@ -480,7 +480,7 @@ module.exports = function (app, validator) {
         };
 
         const notification = await notificationService.createNotification(testNotification);
-        
+
         res.json({
           success: true,
           message: 'Test notification sent',
@@ -498,38 +498,34 @@ module.exports = function (app, validator) {
   );
 
   /**
-   * Mark a notification as read
-   * PUT /api/notifications/:id/read
+   * Mark notification as read
+   * PATCH /api/notifications/:id/read
+   * UPDATED: Now supports new authenticate middleware
    */
-  app.put('/api/notifications/:id/read',
-    jsonParser,
-    auth,
-    mapUserInfo,
-    async (req, res) => {
-      try {
-        const notification = await notificationService.markAsRead(
-          req.params.id,
-          req.user._id
-        );
-        
-        res.json({
-          success: true,
-          message: 'Notification marked as read',
-          data: notification
-        });
-      } catch (error) {
-        console.error('Error marking notification as read:', error);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to mark notification as read',
-          error: error.message
-        });
-      }
+  app.patch('/api/notifications/:id/read', auth, mapUserInfo, async (req, res) => {
+    try {
+      const userId = req.user._id;
+      const { id } = req.params;
+
+      const notification = await notificationService.markAsRead(id, userId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Notification marked as read',
+        data: notification
+      });
+    } catch (error) {
+      console.error('Mark as read error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to mark notification as read',
+        error: error.message
+      });
     }
-  );
+  });
 
   /**
-   * Mark all notifications as read
+   * Mark all notifications as read (legacy endpoint)
    * PUT /api/notifications/read-all
    */
   app.put('/api/notifications/read-all',
@@ -539,7 +535,7 @@ module.exports = function (app, validator) {
     async (req, res) => {
       try {
         const result = await notificationService.markAllAsRead(req.user._id);
-        
+
         res.json({
           success: true,
           message: 'All notifications marked as read',
@@ -557,6 +553,32 @@ module.exports = function (app, validator) {
   );
 
   /**
+   * Mark all notifications as read (new endpoint)
+   * PATCH /api/notifications/mark-all-read
+   * UPDATED: New endpoint for consistency
+   */
+  app.patch('/api/notifications/mark-all-read', auth, mapUserInfo, async (req, res) => {
+    try {
+      const userId = req.user._id;
+
+      const result = await notificationService.markAllAsRead(userId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'All notifications marked as read',
+        data: result
+      });
+    } catch (error) {
+      console.error('Mark all as read error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to mark all as read',
+        error: error.message
+      });
+    }
+  });
+
+  /**
    * Update notification preferences
    * PUT /api/notifications/preferences
    */
@@ -564,7 +586,7 @@ module.exports = function (app, validator) {
     jsonParser,
     auth,
     mapUserInfo,
-    validator.body(preferencesSchema),
+    ...(validator ? [validator.body(preferencesSchema)] : []),
     async (req, res) => {
       try {
         const user = await User.findByIdAndUpdate(
@@ -572,7 +594,7 @@ module.exports = function (app, validator) {
           { $set: { notificationPreferences: req.body } },
           { new: true }
         ).select('notificationPreferences');
-        
+
         res.json({
           success: true,
           message: 'Preferences updated successfully',
@@ -590,34 +612,30 @@ module.exports = function (app, validator) {
   );
 
   /**
-   * Delete a notification
+   * Delete notification
    * DELETE /api/notifications/:id
+   * UPDATED: Now supports new authenticate middleware
    */
-  app.delete('/api/notifications/:id',
-    auth,
-    mapUserInfo,
-    async (req, res) => {
-      try {
-        const notification = await notificationService.deleteNotification(
-          req.params.id,
-          req.user._id
-        );
-        
-        res.json({
-          success: true,
-          message: 'Notification deleted successfully',
-          data: notification
-        });
-      } catch (error) {
-        console.error('Error deleting notification:', error);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to delete notification',
-          error: error.message
-        });
-      }
+  app.delete('/api/notifications/:id', auth, mapUserInfo, async (req, res) => {
+    try {
+      const userId = req.user._id;
+      const { id } = req.params;
+
+      await notificationService.deleteNotification(id, userId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Notification deleted'
+      });
+    } catch (error) {
+      console.error('Delete notification error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete notification',
+        error: error.message
+      });
     }
-  );
+  });
 
   console.log('✅ Notification routes registered successfully');
 };
