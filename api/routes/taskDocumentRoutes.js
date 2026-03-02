@@ -22,7 +22,6 @@ module.exports = function (app, validator) {
   app.patch('/api/task-documents/:documentId/approve',
     jsonParser,
     auth,
-    // authorize('task', 'approve'),
     taskDocumentController.approveDocument
   );
 
@@ -30,7 +29,6 @@ module.exports = function (app, validator) {
   app.patch('/api/task-documents/:documentId/reject',
     jsonParser,
     auth,
-    authorize('task', 'reject'),
     taskDocumentController.rejectDocument
   );
 
@@ -40,10 +38,14 @@ module.exports = function (app, validator) {
     taskDocumentController.downloadDocument
   );
 
+  // View document (inline display) - auth handled in controller to support query token
+  app.get('/api/task-documents/:documentId/view',
+    taskDocumentController.viewDocument
+  );
+
   // Delete document
   app.delete('/api/task-documents/:documentId',
     auth,
-    authorize('task', 'delete'),
     taskDocumentController.deleteDocument
   );
 };

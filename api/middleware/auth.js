@@ -279,14 +279,10 @@ const authorize = (resource, action) => {
       
       // Check if target is a client (role_id = '3') assigned to this staff
       if (targetUser.role_id === '3') {
-        // Check assignment (you'll need to add assignedStaff field to User model)
-        const AssignClient = require('../models/assignClientsModel');
-        const assignment = await AssignClient.findOne({
-          clientId: targetUser._id,
-          staffId: user.id
-        });
+        // Check if client is assigned to this staff member
+        const isAssigned = targetUser.assignedTo && targetUser.assignedTo.toString() === user.id;
         
-        if (assignment) {
+        if (isAssigned) {
           return next();
         }
       }
@@ -318,15 +314,15 @@ const authorize = (resource, action) => {
     
     // Staff (role_id = '2') can access tasks for their assigned clients OR tasks assigned to them
     if (user.role_id === '2') {
-      const AssignClient = require('../models/assignClientsModel');
-      const assignment = await AssignClient.findOne({
-        clientId: task.clientId,
-        staffId: user.id
-      });
+      // Check if staff is assigned to this client
+      const staffMember = await User.findById(user.id).select('assignedClients');
+      const isClientAssigned = staffMember?.assignedClients?.some(
+        clientId => clientId.toString() === task.clientId.toString()
+      );
       
       const isAssignedToStaff = task.assignedTo.toString() === user.id;
       
-      if (assignment || isAssignedToStaff) {
+      if (isClientAssigned || isAssignedToStaff) {
         req.task = task;
         return next();
       }
@@ -378,15 +374,15 @@ const authorize = (resource, action) => {
     
     // Staff (role_id = '2') can update if task is for their client OR assigned to them
     if (user.role_id === '2') {
-      const AssignClient = require('../models/assignClientsModel');
-      const assignment = await AssignClient.findOne({
-        clientId: task.clientId,
-        staffId: user.id
-      });
+      // Check if staff is assigned to this client
+      const staffMember = await User.findById(user.id).select('assignedClients');
+      const isClientAssigned = staffMember?.assignedClients?.some(
+        clientId => clientId.toString() === task.clientId.toString()
+      );
       
       const isAssignedToStaff = task.assignedTo.toString() === user.id;
       
-      if (assignment || isAssignedToStaff) {
+      if (isClientAssigned || isAssignedToStaff) {
         req.task = task;
         return next();
       }
