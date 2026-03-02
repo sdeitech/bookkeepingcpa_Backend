@@ -76,6 +76,7 @@ const taskDocumentController = {
         toDate,
         page = 1,
         limit = 12,
+        clientId,
       } = req.query;
   
       const pageNumber = Math.max(parseInt(page) || 1, 1);
@@ -102,6 +103,10 @@ const taskDocumentController = {
       // ================= FILTER BUILD =================
   
       let filter = { status: "active" };
+
+      if (clientId) {
+        filter.userId = clientId;
+      }
   
       // Status filter
       if (status !== "all") {
