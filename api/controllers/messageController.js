@@ -2,6 +2,7 @@ const Message = require('../models/messageModel');
 const Task = require('../models/taskModel');
 const User = require('../models/userModel');
 const notificationHelper = require('../helpers/notificationHelper');
+const firebaseRealtime = require('../services/firebase.realtime.service');
 
 /**
  * Send a message on a task
@@ -64,6 +65,19 @@ exports.sendMessage = async (req, res) => {
 
     // Populate sender for response
     await newMessage.populate('senderId', 'first_name last_name role_id');
+
+    // Emit Firebase real-time signal for instant message delivery
+    try {
+      await firebaseRealtime.emitNotificationSignal(
+        taskId,
+        newMessage._id,
+        'new_message'
+      );
+      console.log(`📨 Real-time message signal sent for task ${taskId}`);
+    } catch (firebaseError) {
+      console.error('Error emitting message signal:', firebaseError);
+      // Don't fail the request if Firebase fails - polling fallback will work
+    }
 
     // Send notification to the other person (not sender)
     try {

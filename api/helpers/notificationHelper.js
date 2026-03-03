@@ -16,6 +16,7 @@ const {
  * @param {Object} task - Task document
  * @param {Object} client - Client user document
  * @param {Object} assignedBy - User who assigned the task
+ * @returns {Promise<Object>} Result object with success status
  */
 async function notifyTaskAssigned(task, client, assignedBy) {
   try {
@@ -45,9 +46,11 @@ async function notifyTaskAssigned(task, client, assignedBy) {
     });
 
     console.log('✅ Task assigned notification sent to:', client.email);
+    return { success: true };
   } catch (error) {
     console.error('❌ Error sending task assigned notification:', error);
     // Don't throw - notification failure shouldn't break the main flow
+    return { success: false, error: error.message };
   }
 }
 
@@ -57,6 +60,7 @@ async function notifyTaskAssigned(task, client, assignedBy) {
  * @param {Object} task - Task document
  * @param {Object} client - Client user document
  * @param {Object} staff - Staff user document
+ * @returns {Promise<Object>} Result object with success status
  */
 async function notifyDocumentUploaded(document, task, client, staff) {
   try {
@@ -91,8 +95,10 @@ async function notifyDocumentUploaded(document, task, client, staff) {
 
       console.log('✅ Document uploaded notification sent to:', staff.email);
     }
+    return { success: true };
   } catch (error) {
     console.error('❌ Error sending document uploaded notification:', error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -102,6 +108,7 @@ async function notifyDocumentUploaded(document, task, client, staff) {
  * @param {Object} task - Task document
  * @param {Object} client - Client user document
  * @param {Object} reviewer - User who approved the document
+ * @returns {Promise<Object>} Result object with success status
  */
 async function notifyDocumentApproved(document, task, client, reviewer) {
   try {
@@ -133,8 +140,10 @@ async function notifyDocumentApproved(document, task, client, reviewer) {
     });
 
     console.log('✅ Document approved notification sent to:', client.email);
+    return { success: true };
   } catch (error) {
     console.error('❌ Error sending document approved notification:', error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -145,6 +154,7 @@ async function notifyDocumentApproved(document, task, client, reviewer) {
  * @param {Object} client - Client user document
  * @param {Object} reviewer - User who rejected the document
  * @param {String} reason - Rejection reason
+ * @returns {Promise<Object>} Result object with success status
  */
 async function notifyDocumentRejected(document, task, client, reviewer, reason) {
   try {
@@ -177,8 +187,10 @@ async function notifyDocumentRejected(document, task, client, reviewer, reason) 
     });
 
     console.log('✅ Document rejected notification sent to:', client.email);
+    return { success: true };
   } catch (error) {
     console.error('❌ Error sending document rejected notification:', error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -200,21 +212,28 @@ async function notifyNewMessage(task, message, sender, recipient) {
       : message.message;
 
     // Determine action URL based on recipient role
+    // Using role_id consistently (1=admin, 2=staff, 3=client)
     let actionUrl = `/admin/tasks/${task._id}`;
-    if (recipient.role_id === '2') {
+    const roleId = recipient.role_id || recipient.role;
+    
+    if (roleId === '2' || roleId === 2) {
       actionUrl = `/staff/tasks/${task._id}`;
-    } else if (recipient.role_id === '3') {
+    } else if (roleId === '3' || roleId === 3) {
       actionUrl = `/new-dashboard/tasks/${task._id}`;
     }
 
     // Create in-app notification
     await notificationService.createNotification({
-      userId: recipientId,
-      type: 'message',
-      priority: 'normal',
+      recipientId: recipientId,
+      senderId: sender._id,
+      senderName: senderName,
+      type: 'message',  // Using 'message' type (now added to enum)
+      priority: 'medium',
+      category: 'task',
       title: `New message on ${task.title}`,
       message: `${senderName}: ${messagePreview}`,
       actionUrl,
+      actionType: 'navigate',
       metadata: {
         taskId: task._id.toString(),
         messageId: message._id.toString(),
