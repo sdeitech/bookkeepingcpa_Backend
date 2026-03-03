@@ -3,6 +3,7 @@ const User = require('../models/userModel');
 const Settings = require('../models/settingsModel');
 const TaskTemplate = require('../models/taskTemplateModel');
 const TaskDocument = require('../models/taskDocumentModel');
+const notificationHelper = require('../helpers/notificationHelper');
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const s3 = require("../config/s3");
 
@@ -137,10 +138,24 @@ exports.createTask = async (req, res) => {
         }
 
         // Populate assignee details
-        await task.populate('assignedTo', 'name email');
-        await task.populate('assignedBy', 'name email');
+        await task.populate('assignedTo', 'first_name last_name email');
+        await task.populate('assignedBy', 'first_name last_name email');
+        await task.populate('clientId', 'first_name last_name email');
 
-        // TODO: Send notification (will implement later)
+        // Send notification if task is assigned to a client
+        try {
+            if (assignedToRole === 'CLIENT') {
+                const client = await User.findById(finalClientId);
+                const assignedBy = await User.findById(createdBy);
+                
+                if (client && assignedBy) {
+                    await notificationHelper.notifyTaskAssigned(task, client, assignedBy);
+                }
+            }
+        } catch (notifError) {
+            console.error('Notification error:', notifError);
+            // Don't fail the request if notification fails
+        }
 
         res.status(201).json({
             success: true,
@@ -190,14 +205,21 @@ exports.getTasks = async (req, res) => {
             if (clientId) query.clientId = clientId;
             if (staffId) query.staffId = staffId;
         } else if (user.role_id === '2') { // STAFF
-            // Staff can see tasks for their assigned clients OR tasks assigned to them
+            // Staff can see their own tasks and client tasks for assigned clients
             const staffMember = await User.findById(user._id).select('assignedClients');
             const clientIds = staffMember?.assignedClients || [];
 
-            query.$or = [
-                { clientId: { $in: clientIds } },
-                { assignedTo: user._id }
-            ];
+            if (viewFilter === 'staff_tasks') {
+                query.assignedTo = user._id;
+            } else if (viewFilter === 'client_tasks') {
+                query.clientId = { $in: clientIds };
+                query.assignedToRole = 'CLIENT';
+            } else {
+                query.$or = [
+                    { assignedTo: user._id },
+                    { clientId: { $in: clientIds }, assignedToRole: 'CLIENT' }
+                ];
+            }
 
             // Apply additional filters
             if (clientId) query.clientId = clientId;
@@ -722,6 +744,29 @@ exports.uploadDocument = async (req, res) => {
 
         task.updatedAt = new Date();
         await task.save();
+
+        // Send notification to staff and admin
+        try {
+            await task.populate('clientId', 'first_name last_name email');
+            await task.populate('staffId', 'first_name last_name email');
+            
+            const client = task.clientId;
+            const staff = task.staffId;
+            
+            // Notify assigned staff
+            if (staff) {
+                await notificationHelper.notifyDocumentUploaded(taskDocument, task, client, staff);
+            }
+            
+            // Also notify all admins
+            const adminUsers = await User.find({ role_id: '1' });
+            for (const admin of adminUsers) {
+                await notificationHelper.notifyDocumentUploaded(taskDocument, task, client, admin);
+            }
+        } catch (notifError) {
+            console.error('Notification error:', notifError);
+            // Don't fail the request if notification fails
+        }
 
         res.status(200).json({
             success: true,
