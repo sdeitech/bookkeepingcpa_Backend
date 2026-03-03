@@ -7,6 +7,7 @@
 const Notification = require('../models/notification');
 const nodemailer = require('nodemailer');
 const firebaseRealtime = require('./firebase.realtime.service');
+const User = require('../models/userModel');
 
 class NotificationService {
   constructor() {
@@ -114,7 +115,7 @@ class NotificationService {
       }
 
       // Get user email
-      const User = require('../models/user');
+      const User = require('../models/userModel');
       const user = await User.findById(notification.recipientId);
       
       if (!user || !user.email) {
@@ -150,6 +151,9 @@ class NotificationService {
    * @param {Object} notification - Notification document
    */
   generateEmailTemplate(notification) {
+    // Get frontend URL with fallback
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
     return `
       <!DOCTYPE html>
       <html>
@@ -184,7 +188,7 @@ class NotificationService {
               <h2>${notification.title}</h2>
               <p>${notification.message}</p>
               ${notification.actionUrl ? `
-                <a href="${process.env.FRONTEND_URL}${notification.actionUrl}" class="button">
+                <a href="${frontendUrl}${notification.actionUrl}" class="button">
                   View Details
                 </a>
               ` : ''}
@@ -216,7 +220,6 @@ class NotificationService {
       } = broadcastData;
 
       // Get all target users
-      const User = require('../models/user');
       let query = {};
       
       if (recipientRole !== 'all') {

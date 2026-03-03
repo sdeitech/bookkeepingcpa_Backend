@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema({
   // Notification content
   type: {
     type: String,
-    enum: ['announcement', 'assignment', 'document', 'payment', 'reminder', 'system', 'alert'],
+    enum: ['announcement', 'assignment', 'document', 'payment', 'reminder', 'system', 'alert', 'message'],
     required: true
   },
   title: {
@@ -218,6 +218,7 @@ const notificationSchema = new mongoose.Schema({
 // Indexes for efficient querying
 notificationSchema.index({ recipientId: 1, createdAt: -1 });
 notificationSchema.index({ recipientId: 1, isRead: 1 });
+notificationSchema.index({ recipientId: 1, isRead: 1, status: 1 }); // Compound index for common query pattern
 notificationSchema.index({ recipientRole: 1, createdAt: -1 });
 notificationSchema.index({ senderId: 1, createdAt: -1 });
 notificationSchema.index({ status: 1, createdAt: -1 });
