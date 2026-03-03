@@ -17,6 +17,10 @@ module.exports = function (app, validator) {
     require('./taskDocumentRoutes')(app, validator)  // Task document routes (NEW)
     require('./messageRoutes')(app, validator)  // Message routes (NEW)
     
+    // Firebase authentication routes
+    const firebaseAuthRoutes = require('./firebaseAuthRoutes');
+    app.use('/api/auth', firebaseAuthRoutes);
+    
     // Test routes for Firebase notifications (only in development/staging)
     if (process.env.NODE_ENV !== 'production') {
         require('./testNotificationRoutes')(app, validator)
