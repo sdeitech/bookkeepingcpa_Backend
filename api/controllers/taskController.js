@@ -205,14 +205,21 @@ exports.getTasks = async (req, res) => {
             if (clientId) query.clientId = clientId;
             if (staffId) query.staffId = staffId;
         } else if (user.role_id === '2') { // STAFF
-            // Staff can see tasks for their assigned clients OR tasks assigned to them
+            // Staff can see their own tasks and client tasks for assigned clients
             const staffMember = await User.findById(user._id).select('assignedClients');
             const clientIds = staffMember?.assignedClients || [];
 
-            query.$or = [
-                { clientId: { $in: clientIds } },
-                { assignedTo: user._id }
-            ];
+            if (viewFilter === 'staff_tasks') {
+                query.assignedTo = user._id;
+            } else if (viewFilter === 'client_tasks') {
+                query.clientId = { $in: clientIds };
+                query.assignedToRole = 'CLIENT';
+            } else {
+                query.$or = [
+                    { assignedTo: user._id },
+                    { clientId: { $in: clientIds }, assignedToRole: 'CLIENT' }
+                ];
+            }
 
             // Apply additional filters
             if (clientId) query.clientId = clientId;

@@ -1,13 +1,17 @@
 const auth = require('../middleware/auth');
 const messageController = require('../controllers/messageController');
+const bodyParser = require('body-parser');
 
 module.exports = function (app, validator) {
+  const jsonParser = bodyParser.json();
+   
   /**
    * Send a message on a task
    * POST /api/tasks/:taskId/messages
    */
   app.post(
     '/api/tasks/:taskId/messages',
+    jsonParser,
     auth,
     messageController.sendMessage
   );
