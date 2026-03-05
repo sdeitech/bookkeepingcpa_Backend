@@ -261,13 +261,20 @@ module.exports = (app, validator) => {
     authMiddleware,
     quickbooksAuthMiddleware,
     validator.query(quickbooksValidation.getReport),
-    quickbooksController.getCashFlowReport || ((req, res) => {
-      const resModel = require('../lib/resModel');
-      resModel.success = false;
-      resModel.message = 'Cash Flow report endpoint not yet implemented';
-      resModel.data = null;
-      return res.status(501).json(resModel);
-    })
+    quickbooksController.getCashFlowReport
+  );
+
+  /**
+   * Get Trial Balance report
+   * GET /api/quickbooks/reports/trial-balance
+   * Required: User authentication, active QuickBooks connection
+   * Query params: startDate (required), endDate (required), summarizeBy
+   */
+  app.get('/api/quickbooks/reports/trial-balance',
+    authMiddleware,
+    quickbooksAuthMiddleware,
+    validator.query(quickbooksValidation.getReport),
+    quickbooksController.getTrialBalanceReport
   );
 
   

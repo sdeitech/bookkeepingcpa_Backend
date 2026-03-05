@@ -205,24 +205,22 @@ exports.getTasks = async (req, res) => {
             if (clientId) query.clientId = clientId;
             if (staffId) query.staffId = staffId;
         } else if (user.role_id === '2') { // STAFF
-            // Staff can see their own tasks and client tasks for assigned clients
             const staffMember = await User.findById(user._id).select('assignedClients');
             const clientIds = staffMember?.assignedClients || [];
 
-            if (viewFilter === 'staff_tasks') {
-                query.assignedTo = user._id;
-            } else if (viewFilter === 'client_tasks') {
-                query.clientId = { $in: clientIds };
-                query.assignedToRole = 'CLIENT';
-            } else {
-                query.$or = [
-                    { assignedTo: user._id },
-                    { clientId: { $in: clientIds }, assignedToRole: 'CLIENT' }
-                ];
-            }
+            // Staff can ONLY see client tasks for assigned clients
+            query.clientId = { $in: clientIds };
+            query.assignedToRole = 'CLIENT';
 
             // Apply additional filters
-            if (clientId) query.clientId = clientId;
+            if (clientId) {
+                const clientIdStrings = clientIds.map((id) => String(id));
+                if (clientIdStrings.includes(String(clientId))) {
+                    query.clientId = clientId;
+                } else {
+                    query.clientId = { $in: [] };
+                }
+            }
         } else if (user.role_id === '3') { // CLIENT
             // Client can only see their own tasks
             query.assignedTo = user._id;

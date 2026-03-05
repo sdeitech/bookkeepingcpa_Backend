@@ -1,8 +1,73 @@
 const QuickBooksCompany = require('../models/quickbooksCompanyModel');
+const User = require('../models/userModel');
 const quickbooksService = require('../services/quickbooks.service');
 const encryptionService = require('../services/encryption.services');
 const resModel = require('../lib/resModel');
 const { getUserId } = require('../utils/getUserContext');
+
+const applyStaffClientContext = async (req, res) => {
+  const clientId = req.query.clientId;
+  if (!clientId) return true;
+
+  const currentUser = req.userInfo;
+  if (!currentUser || !currentUser.role_id) {
+    resModel.success = false;
+    resModel.message = 'Unauthorized';
+    resModel.data = null;
+    res.status(401).json(resModel);
+    return false;
+  }
+
+  if (currentUser.role_id === '2') {
+    const staffMember = await User.findById(currentUser.id).select('assignedClients');
+    const isAssigned = staffMember?.assignedClients?.some(
+      (assignedId) => assignedId.toString() === clientId
+    );
+    if (!isAssigned) {
+      resModel.success = false;
+      resModel.message = 'Unauthorized. Client is not assigned to this staff member';
+      resModel.data = null;
+      res.status(403).json(resModel);
+      return false;
+    }
+
+    const client = await User.findById(clientId).select('role_id active');
+    if (!client) {
+      resModel.success = false;
+      resModel.message = 'Target client not found';
+      resModel.data = null;
+      res.status(404).json(resModel);
+      return false;
+    }
+    if (client.role_id !== '3') {
+      resModel.success = false;
+      resModel.message = 'Target user is not a client';
+      resModel.data = null;
+      res.status(400).json(resModel);
+      return false;
+    }
+    if (!client.active) {
+      resModel.success = false;
+      resModel.message = 'Target client account is inactive';
+      resModel.data = null;
+      res.status(403).json(resModel);
+      return false;
+    }
+
+    req.targetUserId = clientId;
+    return true;
+  }
+
+  if (currentUser.role_id === '3') {
+    resModel.success = false;
+    resModel.message = 'Unauthorized';
+    resModel.data = null;
+    res.status(403).json(resModel);
+    return false;
+  }
+
+  return true;
+};
 
 
 
@@ -12,6 +77,9 @@ const { getUserId } = require('../utils/getUserContext');
  */
 const quickbooksAuthMiddleware = async (req, res, next) => {
   try {
+    const canProceed = await applyStaffClientContext(req, res);
+    if (!canProceed) return;
+
     // Use getUserId to support admin override
     const userId = getUserId(req);
     
@@ -93,6 +161,9 @@ const quickbooksAuthMiddleware = async (req, res, next) => {
  */
 const quickbooksAuthOptional = async (req, res, next) => {
   try {
+    const canProceed = await applyStaffClientContext(req, res);
+    if (!canProceed) return;
+
     // Use getUserId to support admin override
     const userId = getUserId(req);
     
@@ -140,7 +211,10 @@ const refreshLocks = new Map(); // in-memory lock (safe for single instance)
 const ensureValidQuickBooksToken = async (req, res, next) => {
   console.log(req.query)
   try {
-    const userId = req.query.clientId ? req.query.clientId : req.userInfo?.id;
+    const canProceed = await applyStaffClientContext(req, res);
+    if (!canProceed) return;
+
+    const userId = getUserId(req);
     console.log("Ensuring valid QuickBooks token for user:", userId);
 
     const company = await QuickBooksCompany.findOne({ userId });

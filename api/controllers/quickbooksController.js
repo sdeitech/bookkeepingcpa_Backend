@@ -1,4 +1,5 @@
 const QuickBooksCompany = require('../models/quickbooksCompanyModel');
+const User = require('../models/userModel');
 const quickbooksService = require('../services/quickbooks.service');
 const encryptionService = require('../services/encryption.services');
 const resModel = require('../lib/resModel');
@@ -205,7 +206,80 @@ const quickbooksController = {
    */
   getConnectionStatus: async (req, res) => {
     try {
-      const userId = getUserId(req);
+      let userId = getUserId(req);
+      const clientId = req.query.clientId;
+
+      if (clientId) {
+        const currentUser = req.userInfo;
+
+        if (!currentUser || !currentUser.role_id) {
+          resModel.success = false;
+          resModel.message = 'Unauthorized';
+          resModel.data = null;
+          return res.status(401).json(resModel);
+        }
+
+        if (currentUser.role_id === '1') {
+          const client = await User.findById(clientId).select('role_id active email');
+          if (!client) {
+            resModel.success = false;
+            resModel.message = 'Target client not found';
+            resModel.data = null;
+            return res.status(404).json(resModel);
+          }
+          if (client.role_id !== '3') {
+            resModel.success = false;
+            resModel.message = 'Target user is not a client';
+            resModel.data = null;
+            return res.status(400).json(resModel);
+          }
+          if (!client.active) {
+            resModel.success = false;
+            resModel.message = 'Target client account is inactive';
+            resModel.data = null;
+            return res.status(403).json(resModel);
+          }
+          userId = clientId;
+        } else if (currentUser.role_id === '2') {
+          const staffMember = await User.findById(currentUser.id).select('assignedClients');
+          const isAssigned = staffMember?.assignedClients?.some(
+            (assignedId) => assignedId.toString() === clientId
+          );
+          if (!isAssigned) {
+            resModel.success = false;
+            resModel.message = 'Unauthorized. Client is not assigned to this staff member';
+            resModel.data = null;
+            return res.status(403).json(resModel);
+          }
+
+          const client = await User.findById(clientId).select('role_id active email');
+          if (!client) {
+            resModel.success = false;
+            resModel.message = 'Target client not found';
+            resModel.data = null;
+            return res.status(404).json(resModel);
+          }
+          if (client.role_id !== '3') {
+            resModel.success = false;
+            resModel.message = 'Target user is not a client';
+            resModel.data = null;
+            return res.status(400).json(resModel);
+          }
+          if (!client.active) {
+            resModel.success = false;
+            resModel.message = 'Target client account is inactive';
+            resModel.data = null;
+            return res.status(403).json(resModel);
+          }
+          userId = clientId;
+        } else {
+          resModel.success = false;
+          resModel.message = 'Unauthorized';
+          resModel.data = null;
+          return res.status(403).json(resModel);
+        }
+      }
+
       const company = await QuickBooksCompany.findOne({ userId })
         .select('isActive companyId companyName companyEmail companyAddress baseCurrency lastSyncedAt tokenExpiresAt createdAt stats isPaused');
 
@@ -811,6 +885,84 @@ const quickbooksController = {
       return res.status(200).json(resModel);
     } catch (error) {
       console.error('Get Balance Sheet report error:', error);
+      resModel.success = false;
+      resModel.message = `Failed to generate report: ${error.message}`;
+      resModel.data = null;
+      return res.status(500).json(resModel);
+    }
+  },
+
+  /**
+   * Get Cash Flow report
+   * GET /api/quickbooks/reports/cash-flow
+   */
+  getCashFlowReport: async (req, res) => {
+    try {
+      const company = req.quickbooksCompany; // From middleware
+      let accessToken = encryptionService.decrypt(company.accessToken);
+
+      // Validate date parameters
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        resModel.success = false;
+        resModel.message = 'Start date and end date are required';
+        resModel.data = null;
+        return res.status(400).json(resModel);
+      }
+
+      // Fetch report
+      const report = await quickbooksService.getCashFlowReport(accessToken, company.companyId, req.query);
+
+      // Update stats
+      company.lastReportSync = new Date();
+      company.stats.lastReportGenerated = new Date();
+      await company.save();
+
+      resModel.success = true;
+      resModel.message = 'Cash Flow report generated successfully';
+      resModel.data = report;
+      return res.status(200).json(resModel);
+    } catch (error) {
+      console.error('Get Cash Flow report error:', error);
+      resModel.success = false;
+      resModel.message = `Failed to generate report: ${error.message}`;
+      resModel.data = null;
+      return res.status(500).json(resModel);
+    }
+  },
+
+  /**
+   * Get Trial Balance report
+   * GET /api/quickbooks/reports/trial-balance
+   */
+  getTrialBalanceReport: async (req, res) => {
+    try {
+      const company = req.quickbooksCompany; // From middleware
+      let accessToken = encryptionService.decrypt(company.accessToken);
+
+      // Validate date parameters
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        resModel.success = false;
+        resModel.message = 'Start date and end date are required';
+        resModel.data = null;
+        return res.status(400).json(resModel);
+      }
+
+      // Fetch report
+      const report = await quickbooksService.getTrialBalanceReport(accessToken, company.companyId, req.query);
+
+      // Update stats
+      company.lastReportSync = new Date();
+      company.stats.lastReportGenerated = new Date();
+      await company.save();
+
+      resModel.success = true;
+      resModel.message = 'Trial Balance report generated successfully';
+      resModel.data = report;
+      return res.status(200).json(resModel);
+    } catch (error) {
+      console.error('Get Trial Balance report error:', error);
       resModel.success = false;
       resModel.message = `Failed to generate report: ${error.message}`;
       resModel.data = null;

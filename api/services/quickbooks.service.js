@@ -514,7 +514,7 @@ class QuickBooksService {
   }
 
   async getCashFlowReport(accessToken, realmId, params = {}) {
-    return this.getReport(accessToken, realmId, 'StatementOfCashFlows', {
+    return this.getReport(accessToken, realmId, 'CashFlow', {
       ...params,
       accountingMethod: params.accountingMethod || 'Accrual',
     });
