@@ -28,7 +28,8 @@ module.exports.commonId = joi.object({
 
 module.exports.assignClient = joi.object({
   clientId: joi.string().required(),
-  staffId: joi.string().required()
+  staffId: joi.string().required(),
+  notes: joi.string().optional().allow('').max(1000)
 })
 
 module.exports.unassignClient = joi.object({

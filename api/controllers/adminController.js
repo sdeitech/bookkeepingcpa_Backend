@@ -799,7 +799,7 @@ module.exports.getAdminDashboard = async (req, res) => {
  */
 module.exports.assignClient = async (req, res) => {
     try {
-        const { clientId, staffId } = req.body;
+        const { clientId, staffId, notes } = req.body;
         const adminId = req.userInfo?.id;
 
         // Check if the requesting user is a super admin
@@ -837,32 +837,23 @@ module.exports.assignClient = async (req, res) => {
             return res.status(400).json(resModel);
         }
 
-        // Use transaction to ensure both updates succeed or fail together
-        const session = await User.startSession();
-        session.startTransaction();
+        // Update both user documents (no transaction needed for development)
+        // Add client to staff's assignedClients array
+        await User.updateOne(
+            { _id: staffId, role_id: '2' },
+            { $addToSet: { assignedClients: clientId } }
+        );
 
-        try {
-            // Add client to staff's assignedClients array
-            await User.updateOne(
-                { _id: staffId, role_id: '2' },
-                { $addToSet: { assignedClients: clientId } },
-                { session }
-            );
-
-            // Set staff in client's assignedTo field
-            await User.updateOne(
-                { _id: clientId, role_id: '3' },
-                { $set: { assignedTo: staffId } },
-                { session }
-            );
-
-            await session.commitTransaction();
-        } catch (error) {
-            await session.abortTransaction();
-            throw error;
-        } finally {
-            session.endSession();
-        }
+        // Set staff in client's assignedTo field and save notes
+        await User.updateOne(
+            { _id: clientId, role_id: '3' },
+            { 
+                $set: { 
+                    assignedTo: staffId,
+                    assignmentNotes: notes || ''
+                } 
+            }
+        );
 
         // ─────────────────────────────────────────────
         // NOTIFICATION: Notify Staff Member
@@ -986,32 +977,23 @@ module.exports.unassignClient = async (req, res) => {
             return res.status(403).json(resModel);
         }
 
-        // Use transaction to ensure both updates succeed or fail together
-        const session = await User.startSession();
-        session.startTransaction();
+        // Update both user documents (no transaction needed for development)
+        // Remove client from staff's assignedClients array
+        await User.updateOne(
+            { _id: staffId, role_id: '2' },
+            { $pull: { assignedClients: clientId } }
+        );
 
-        try {
-            // Remove client from staff's assignedClients array
-            await User.updateOne(
-                { _id: staffId, role_id: '2' },
-                { $pull: { assignedClients: clientId } },
-                { session }
-            );
-
-            // Clear staff in client's assignedTo field
-            await User.updateOne(
-                { _id: clientId, role_id: '3' },
-                { $set: { assignedTo: null } },
-                { session }
-            );
-
-            await session.commitTransaction();
-        } catch (error) {
-            await session.abortTransaction();
-            throw error;
-        } finally {
-            session.endSession();
-        }
+        // Clear staff in client's assignedTo field and notes
+        await User.updateOne(
+            { _id: clientId, role_id: '3' },
+            { 
+                $set: { 
+                    assignedTo: null,
+                    assignmentNotes: ''
+                } 
+            }
+        );
 
         resModel.success = true;
         resModel.message = "Client unassigned from staff successfully";
