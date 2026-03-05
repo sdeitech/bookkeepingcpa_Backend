@@ -10,6 +10,11 @@ const assignClientSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User',  // In Plurify, clients are also Users with role_id: 3
     required: true
+  },
+  notes: {
+    type: String,
+    default: '',
+    maxlength: 1000
   }
 }, 
 { timestamps: true }

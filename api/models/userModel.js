@@ -37,7 +37,13 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
-    } // For clients: staff ID managing them
+    }, // For clients: staff ID managing them
+    
+    assignmentNotes: {
+      type: String,
+      default: '',
+      maxlength: 1000
+    } // For clients: notes about their assignment
   },
   { timestamps: true }
 );
