@@ -14,20 +14,46 @@ exports.sendMessage = async (req, res) => {
     const { message } = req.body;
     const userId = req.user._id;
 
-    // Validate message
-    if (!message || message.trim().length === 0) {
+    // Validate taskId format
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid task ID format'
+      });
+    }
+
+    // Validate message type
+    if (typeof message !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Message must be a string'
+      });
+    }
+
+    // Validate message content
+    const trimmedMessage = message.trim();
+    
+    if (trimmedMessage.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'Message cannot be empty'
       });
     }
 
-    if (message.length > 2000) {
+    if (trimmedMessage.length > 2000) {
       return res.status(400).json({
         success: false,
         message: 'Message too long (max 2000 characters)'
       });
     }
+
+    // Basic XSS protection - sanitize message
+    const sanitizedMessage = trimmedMessage
+      .replace(/<script[^>]*>.*?<\/script>/gi, '')
+      .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '')
+      .replace(/<object[^>]*>.*?<\/object>/gi, '')
+      .replace(/<embed[^>]*>/gi, '');
 
     // Check if task exists
     const task = await Task.findById(taskId)
@@ -41,8 +67,18 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Permissions inherited from task view - no additional checks needed
-    // If user can view the task, they can send messages
+    // Permission check: Verify user is a task participant
+    const isClient = task.clientId && task.clientId._id.toString() === userId.toString();
+    const isStaff = task.staffId && task.staffId._id.toString() === userId.toString();
+    const isCreator = task.createdBy && task.createdBy.toString() === userId.toString();
+    const isAdmin = req.user.role_id === '1';
+
+    if (!isClient && !isStaff && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to send messages on this task'
+      });
+    }
 
     // Get sender info
     const sender = await User.findById(userId).select('first_name last_name role_id');
@@ -54,13 +90,13 @@ exports.sendMessage = async (req, res) => {
       '3': 'client'
     };
 
-    // Create message
+    // Create message with sanitized content
     const newMessage = await Message.create({
       taskId,
       senderId: userId,
       senderName: `${sender.first_name} ${sender.last_name}`,
       senderRole: roleMap[sender.role_id] || 'client',
-      message: message.trim()
+      message: sanitizedMessage
     });
 
     // Populate sender for response
@@ -128,6 +164,15 @@ exports.getTaskMessages = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const userId = req.user._id;
 
+    // Validate taskId format
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid task ID format'
+      });
+    }
+
     // Check if task exists
     const task = await Task.findById(taskId);
 
@@ -138,14 +183,25 @@ exports.getTaskMessages = async (req, res) => {
       });
     }
 
-    // Permissions inherited from task view - no additional checks needed
+    // Permission check: Verify user is a task participant
+    const isClient = task.clientId && task.clientId.toString() === userId.toString();
+    const isStaff = task.staffId && task.staffId.toString() === userId.toString();
+    const isCreator = task.createdBy && task.createdBy.toString() === userId.toString();
+    const isAdmin = req.user.role_id === '1';
+
+    if (!isClient && !isStaff && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view messages on this task'
+      });
+    }
 
     // Get total count
     const totalMessages = await Message.countDocuments({ taskId });
 
-    // Get messages - LATEST FIRST (newest at top, like Jira)
+    // Get messages - OLDEST FIRST (chronological order, like chat apps)
     const messages = await Message.find({ taskId })
-      .sort({ createdAt: -1 }) // Latest first
+      .sort({ createdAt: 1 }) // Oldest first - chronological order
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('senderId', 'first_name last_name role_id');

@@ -115,7 +115,6 @@ class NotificationService {
       }
 
       // Get user email
-      const User = require('../models/userModel');
       const user = await User.findById(notification.recipientId);
       
       if (!user || !user.email) {
@@ -223,7 +222,7 @@ class NotificationService {
       let query = {};
       
       if (recipientRole !== 'all') {
-        query.role = recipientRole;
+        query.role_id = recipientRole;
       }
       
       const users = await User.find(query).select('_id');
