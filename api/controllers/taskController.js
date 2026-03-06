@@ -756,10 +756,13 @@ exports.uploadDocument = async (req, res) => {
                 await notificationHelper.notifyDocumentUploaded(taskDocument, task, client, staff);
             }
             
-            // Also notify all admins
-            const adminUsers = await User.find({ role_id: '1' });
-            for (const admin of adminUsers) {
-                await notificationHelper.notifyDocumentUploaded(taskDocument, task, client, admin);
+            // Also notify all admins only if task was created by an admin
+            const assignedByUser = task.assignedBy
+                ? await User.findById(task.assignedBy).select('role_id')
+                : null;
+            const isAssignedByAdmin = assignedByUser?.role_id === '1';
+            if (isAssignedByAdmin && assignedByUser) {
+                await notificationHelper.notifyDocumentUploaded(taskDocument, task, client, assignedByUser);
             }
         } catch (notifError) {
             console.error('Notification error:', notifError);
