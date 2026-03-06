@@ -247,11 +247,7 @@ const authorize = (resource, action) => {
         return await canUpdateTaskStatus(req, res, next, user, taskId);
         
       case 'delete':
-        // Only admin can delete (already handled above)
-        return res.status(403).json({
-          success: false,
-          message: 'Only administrators can delete tasks'
-        });
+        return await canDeleteTask(req, res, next, user, taskId);
         
       default:
         return res.status(400).json({
@@ -339,6 +335,39 @@ const authorize = (resource, action) => {
     return res.status(403).json({
       success: false,
       message: 'Access denied'
+    });
+  }
+
+  // Can delete task?
+  async function canDeleteTask(req, res, next, user, taskId) {
+    const Task = require('../models/taskModel');
+    const task = await Task.findById(taskId);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Staff (role_id = '2') can delete tasks for their assigned clients OR tasks assigned to them
+    if (user.role_id === '2') {
+      const staffMember = await User.findById(user.id).select('assignedClients');
+      const isClientAssigned = staffMember?.assignedClients?.some(
+        clientId => clientId.toString() === task.clientId.toString()
+      );
+
+      const isAssignedToStaff = task.assignedTo.toString() === user.id;
+
+      if (isClientAssigned || isAssignedToStaff) {
+        req.task = task;
+        return next();
+      }
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Only administrators or assigned staff can delete tasks'
     });
   }
   
