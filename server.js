@@ -41,6 +41,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// ✅ Serve static files from uploads directory
+// This allows profile pictures and other uploaded files to be accessed via HTTP
+app.use('/api/uploads', express.static(path.join(__dirname, 'api/uploads')));
+console.log('📁 Static files served from /api/uploads');
+
 // ✅ Don't apply body parsers globally - let routes handle their own parsing
 // This allows the webhook route to receive raw body for signature verification
 
