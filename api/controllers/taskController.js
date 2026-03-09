@@ -204,24 +204,25 @@ exports.getTasks = async (req, res) => {
             // Admin can see all tasks
             if (clientId) query.clientId = clientId;
             if (staffId) query.staffId = staffId;
-        } else if (user.role_id === '2') { // STAFF
+        }else if (user.role_id === '2') { // STAFF
+
             const staffMember = await User.findById(user._id).select('assignedClients');
             const clientIds = staffMember?.assignedClients || [];
-
-            // Staff can ONLY see client tasks for assigned clients
-            query.clientId = { $in: clientIds };
-            query.assignedToRole = 'CLIENT';
-
-            // Apply additional filters
-            if (clientId) {
-                const clientIdStrings = clientIds.map((id) => String(id));
-                if (clientIdStrings.includes(String(clientId))) {
-                    query.clientId = clientId;
-                } else {
-                    query.clientId = { $in: [] };
-                }
+        
+            if (viewFilter === 'staff_tasks') {
+        
+                // Tasks assigned directly to staff
+                query.assignedTo = user._id;
+                query.assignedToRole = 'STAFF';
+        
+            } else {
+        
+                // Client tasks staff manages
+                query.clientId = { $in: clientIds };
+                query.assignedToRole = 'CLIENT';
+        
             }
-        } else if (user.role_id === '3') { // CLIENT
+        }else if (user.role_id === '3') { // CLIENT
             // Client can only see their own tasks
             query.assignedTo = user._id;
         }
@@ -348,6 +349,8 @@ exports.getTasks = async (req, res) => {
             .sort(sort)
             .skip(skip)
             .limit(parseInt(limit));
+
+        console.log(query)
 
         // Get total count
         const totalItems = await Task.countDocuments(query);

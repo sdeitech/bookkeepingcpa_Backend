@@ -21,7 +21,7 @@ const emailService = require('../services/email.service');
  */
 module.exports.signupUser = async (req, res) => {
     try {
-        const { first_name, last_name, email, password, confirmPassword } = req.body;
+        const { first_name, last_name, email, password, confirmPassword, plan } = req.body;
         const userCheck = await User.findOne({ email });
         if (userCheck) {
             resModel.success = false;
@@ -38,6 +38,7 @@ module.exports.signupUser = async (req, res) => {
                         password: passwordHash,
                         first_name: first_name,
                         last_name: last_name,
+                        plan: plan ?? null,
                         role_id: '3' // Client role for self-registration
                     }
                     const newUser = new User(userInfo)
@@ -422,7 +423,7 @@ module.exports.updateUserProfile = async (req, res) => {
         }
 
         // Extract only allowed fields for update
-        const allowedUpdates = ['first_name', 'last_name', 'phoneNumber', 'dob', 'address', 'profile'];
+        const allowedUpdates = ['first_name', 'last_name', 'phoneNumber', 'dob', 'address', 'profile', 'plan'];
         const updates = {};
         
         // Only include fields that are in the request and are allowed
