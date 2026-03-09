@@ -9,6 +9,7 @@ module.exports.signupUser = joi.object({
   email: joi.string().email().required(),
   first_name: joi.string().required(),
   last_name: joi.string().required(),
+  plan: joi.string().optional().allow(null, ''),
   password: joi.string().required(),
   confirmPassword: joi.string().required(),
 })

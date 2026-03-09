@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     role_id: { type: String, required: true }, // 1=SuperAdmin, 2=Staff, 3=Client
     active: { type: Boolean, default: true },
     phoneNumber: { type: String, default: null },
+    plan: { type: String, default: null },
     dob: { type: String },
     address: { type: String, default: null },
     // For staff members, we can use inviteToken and inviteTokenExpiry to manage invitations
