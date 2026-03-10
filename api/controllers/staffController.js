@@ -1,5 +1,6 @@
 const resModel = require('../lib/resModel');
 const User = require("../models/userModel");
+const Task = require("../models/taskModel");
 const progressService = require('../services/progress.service');
 const ShopifyStore = require('../models/shopifyStoreModel');
 const AmazonSeller = require('../models/amazonSellerModel');
@@ -138,6 +139,10 @@ module.exports.getMyClients = async (req, res) => {
 module.exports.getStaffDashboard = async (req, res) => {
     try {
         const staffId = req.userInfo?.id;
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
         
         // Verify the user is a staff member
         const staffMember = await User.findById(staffId);
@@ -179,6 +184,27 @@ module.exports.getStaffDashboard = async (req, res) => {
         // Calculate progress summary for all assigned clients
         const allClientIds = staffMemberWithClients?.assignedClients || [];
         const allProgressMap = await progressService.getMultipleClientsProgress(allClientIds);
+
+        const [activeClientsCount, pendingTasks, completedToday] = await Promise.all([
+            allClientIds.length > 0
+                ? User.countDocuments({ _id: { $in: allClientIds }, role_id: '3', active: true })
+                : Promise.resolve(0),
+            allClientIds.length > 0
+                ? Task.countDocuments({
+                    isDeleted: { $ne: true },
+                    clientId: { $in: allClientIds },
+                    status: { $nin: ['COMPLETED', 'CANCELLED'] }
+                })
+                : Promise.resolve(0),
+            allClientIds.length > 0
+                ? Task.countDocuments({
+                    isDeleted: { $ne: true },
+                    clientId: { $in: allClientIds },
+                    status: 'COMPLETED',
+                    completedAt: { $gte: startOfToday, $lte: endOfToday }
+                })
+                : Promise.resolve(0)
+        ]);
         
         // Count progress statuses
         let onboardingComplete = 0;
@@ -196,6 +222,9 @@ module.exports.getStaffDashboard = async (req, res) => {
         const dashboardData = {
             stats: {
                 assignedClients: assignedClientsCount,
+                pendingTasks,
+                completedToday,
+                activeClients: activeClientsCount,
                 onboardingComplete,
                 activeSubscriptions,
                 amazonIntegrations,

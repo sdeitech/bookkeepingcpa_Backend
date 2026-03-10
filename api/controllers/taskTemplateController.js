@@ -287,17 +287,20 @@ exports.toggleTemplate = async (req, res) => {
             });
         }
 
-        // 🔥 Toggle active field
-        template.active = !template.active;
-
-        await template.save();
+        // Toggle only the status with an atomic update so full template
+        // validation (e.g. requiredDocuments) does not block this action.
+        const newActiveState = !template.active;
+        await TaskTemplate.updateOne(
+            { _id: template._id },
+            { $set: { active: newActiveState } }
+        );
 
         res.status(200).json({
             success: true,
-            message: `Template ${template.active ? "activated" : "deactivated"} successfully`,
+            message: `Template ${newActiveState ? "activated" : "deactivated"} successfully`,
             data: {
                 _id: template._id,
-                active: template.active
+                active: newActiveState
             }
         });
 
