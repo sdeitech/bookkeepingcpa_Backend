@@ -384,14 +384,14 @@ const authorize = (resource, action) => {
       });
     }
     
-    // Validate status transitions
+    // Validate status transitions (must match taskController.js)
     const validTransitions = {
-      'NOT_STARTED': ['IN_PROGRESS'],
-      'IN_PROGRESS': ['PENDING_REVIEW', 'COMPLETED'],
-      'PENDING_REVIEW': ['NEEDS_REVISION', 'COMPLETED'],
-      'NEEDS_REVISION': ['IN_PROGRESS'],
-      'COMPLETED': [],
-      'CANCELLED': []
+      'NOT_STARTED': ['IN_PROGRESS', 'ON_HOLD'],
+      'IN_PROGRESS': ['PENDING_REVIEW', 'NEEDS_REVISION', 'ON_HOLD'],
+      'PENDING_REVIEW': ['COMPLETED', 'NEEDS_REVISION', 'ON_HOLD'],
+      'NEEDS_REVISION': ['IN_PROGRESS', 'ON_HOLD'],
+      'ON_HOLD': ['IN_PROGRESS'],
+      'COMPLETED': []
     };
     
     if (!validTransitions[task.status]?.includes(status)) {
@@ -420,7 +420,8 @@ const authorize = (resource, action) => {
     // Client (role_id = '3') can update their own tasks (limited transitions)
     if (user.role_id === '3') {
       if (task.assignedTo.toString() === user.id) {
-        const clientAllowedStatuses = ['NOT_STARTED', 'IN_PROGRESS', 'PENDING_REVIEW'];
+        // Clients can only change to IN_PROGRESS and PENDING_REVIEW (not NOT_STARTED)
+        const clientAllowedStatuses = ['IN_PROGRESS', 'PENDING_REVIEW'];
         if (clientAllowedStatuses.includes(status)) {
           req.task = task;
           return next();
