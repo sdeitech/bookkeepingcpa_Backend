@@ -628,8 +628,44 @@ exports.updateTaskStatus = async (req, res) => {
             });
         }
 
-        // Update status
+        // Define valid status transitions (Jira-style strict enforcement)
+        const validTransitions = {
+            'NOT_STARTED': ['IN_PROGRESS', 'ON_HOLD'],
+            'IN_PROGRESS': ['PENDING_REVIEW', 'NEEDS_REVISION', 'ON_HOLD'],
+            'PENDING_REVIEW': ['COMPLETED', 'NEEDS_REVISION', 'ON_HOLD'],
+            'NEEDS_REVISION': ['IN_PROGRESS', 'ON_HOLD'],
+            'ON_HOLD': ['IN_PROGRESS'], // Always resume to IN_PROGRESS
+            'COMPLETED': [] // Cannot change from completed
+        };
+
         const oldStatus = task.status;
+
+        // Check if transition is valid (unless staying in same status)
+        if (status !== oldStatus) {
+            const allowedStatuses = validTransitions[oldStatus] || [];
+            
+            if (!allowedStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid status transition: Cannot change from ${oldStatus} to ${status}. Allowed transitions: ${allowedStatuses.join(', ') || 'None'}`
+                });
+            }
+        }
+
+        // Permission check for ON_HOLD status
+        if (status === 'ON_HOLD') {
+            const isAdmin = user.role_id === '1';
+            const isTaskCreator = task.assignedBy.toString() === user._id.toString();
+            
+            if (!isAdmin && !isTaskCreator) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Only admin or task creator can put task on hold'
+                });
+            }
+        }
+
+        // Update status
         task.status = status;
 
         // Add to status history
@@ -725,23 +761,10 @@ exports.uploadDocument = async (req, res) => {
             }
         }
 
-        const allRequiredUploaded = task.requiredDocuments.every(
-            rd => !rd.isRequired || rd.uploaded
-        );
-
-        if (
-            task.taskType === 'DOCUMENT_UPLOAD' &&
-            task.status === 'IN_PROGRESS' &&
-            allRequiredUploaded
-        ) {
-            task.status = 'PENDING_REVIEW';
-            task.statusHistory.push({
-                status: 'PENDING_REVIEW',
-                changedBy: user._id,
-                changedAt: new Date(),
-                notes: 'All required documents uploaded, awaiting review'
-            });
-        }
+        // ===== REMOVED AUTO-STATUS CHANGE =====
+        // Status changes are now manual only - no automatic transitions
+        // Previously: Auto-changed to PENDING_REVIEW when all docs uploaded
+        // Now: User must manually change status
 
         task.updatedAt = new Date();
         await task.save();

@@ -16,7 +16,7 @@ const taskSchema = new mongoose.Schema(
         // STATUS TRACKING
         status: {
             type: String,
-            enum: ['NOT_STARTED', 'IN_PROGRESS', 'PENDING_REVIEW', 'NEEDS_REVISION', 'COMPLETED', 'CANCELLED'],
+            enum: ['NOT_STARTED', 'IN_PROGRESS', 'PENDING_REVIEW', 'NEEDS_REVISION', 'COMPLETED', 'ON_HOLD'],
             default: 'NOT_STARTED',
             required: true
         },
