@@ -160,18 +160,72 @@ module.exports.inviteStaff = async (req, res) => {
 
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8082';
         const inviteUrl = `${frontendUrl}/staff/complete-invite?token=${inviteToken}`;
+        const companyName = process.env.COMPANY_NAME || 'Bookkeeping CPA';
 
         const emailResult = await emailService.sendEmail({
             to: staffUser.email,
-            subject: `${process.env.COMPANY_NAME || 'Bookkeeping CPA'} Staff Invitation`,
+            subject: `${companyName} Staff Invitation`,
             html: `
-                <p>Hello ${staffUser.first_name || 'there'},</p>
-                <p>You have been invited to join as a staff member.</p>
-                <p>Complete your invitation here:</p>
-                <p><a href="${inviteUrl}">${inviteUrl}</a></p>
-                <p>This invitation expires in 7 days.</p>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${companyName} Staff Invitation</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6fb;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="padding:20px 24px;background:#0f172a;color:#ffffff;">
+              <h1 style="margin:0;font-size:20px;line-height:1.4;">${companyName}</h1>
+              <p style="margin:6px 0 0 0;font-size:13px;opacity:.9;">Staff Invitation</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 24px;">
+              <p style="margin:0 0 14px 0;font-size:15px;">Hello ${staffUser.first_name || 'there'},</p>
+              <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;">
+                You have been invited to join <strong>${companyName}</strong> as a staff member.
+              </p>
+              <p style="margin:0 0 20px 0;font-size:15px;line-height:1.6;">
+                Click the button below to accept and complete your invitation:
+              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px 0;">
+                <tr>
+                  <td align="center" style="border-radius:8px;background:#2563eb;">
+                    <a href="${inviteUrl}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+                      Accept Invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px 0;font-size:13px;color:#6b7280;">Or copy and paste this link into your browser:</p>
+              <p style="margin:0 0 20px 0;font-size:13px;word-break:break-all;">
+                <a href="${inviteUrl}" style="color:#2563eb;text-decoration:underline;">${inviteUrl}</a>
+              </p>
+              <div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:13px;color:#9a3412;">
+                This invitation expires in <strong>7 days</strong>.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #e5e7eb;background:#f9fafb;">
+              <p style="margin:0;font-size:12px;color:#6b7280;">
+                If you did not expect this invitation, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
             `,
-            text: `Hello ${staffUser.first_name || 'there'},\n\nYou have been invited to join as a staff member.\n\nComplete your invitation here: ${inviteUrl}\n\nThis invitation expires in 7 days.`
+            text: `Hello ${staffUser.first_name || 'there'},\n\nYou have been invited to join ${companyName} as a staff member.\n\nAccept invitation: ${inviteUrl}\n\nThis invitation expires in 7 days.\n\nIf you did not expect this invitation, you can safely ignore this email.`
         });
 
         resModel.success = true;
@@ -225,7 +279,7 @@ module.exports.getAllStaff = async (req, res) => {
             { $match: { role_id: "2" } }, // Staff role
             {
                 $addFields: {
-                    clientCount: { 
+                    clientCount: {
                         $cond: {
                             if: { $isArray: "$assignedClients" },
                             then: { $size: "$assignedClients" },
@@ -606,7 +660,9 @@ module.exports.getClientProfile = async (req, res) => {
 
         // Get client details
         const client = await User.findById(clientId)
-            .select('-password -resetPasswordToken -resetPasswordExpires');
+            .select('-password -resetPasswordToken -resetPasswordExpires')
+            .populate('assignedTo', 'first_name last_name email')
+            ;
 
         if (!client) {
             resModel.success = false;
@@ -636,6 +692,8 @@ module.exports.getClientProfile = async (req, res) => {
                 businessName: client.businessName,
                 phone: client.phoneNumber,
                 active: client.active,
+                assignedStaffName: `${client?.assignedTo?.first_name || ''} ${client?.assignedTo?.last_name || ''}`.trim() || null,
+                assignedStaffEmail: client?.assignedTo?.email || null,
                 createdAt: client.createdAt,
                 updatedAt: client.updatedAt
             },
@@ -847,11 +905,11 @@ module.exports.assignClient = async (req, res) => {
         // Set staff in client's assignedTo field and save notes
         await User.updateOne(
             { _id: clientId, role_id: '3' },
-            { 
-                $set: { 
+            {
+                $set: {
                     assignedTo: staffId,
                     assignmentNotes: notes || ''
-                } 
+                }
             }
         );
 
@@ -987,11 +1045,11 @@ module.exports.unassignClient = async (req, res) => {
         // Clear staff in client's assignedTo field and notes
         await User.updateOne(
             { _id: clientId, role_id: '3' },
-            { 
-                $set: { 
+            {
+                $set: {
                     assignedTo: null,
                     assignmentNotes: ''
-                } 
+                }
             }
         );
 
@@ -1168,22 +1226,27 @@ module.exports.getClientsWithAssignments = async (req, res) => {
         const progressMap = await progressService.getMultipleClientsProgress(clientIds);
 
         // Combine clients with their assignment info and progress
-        const clientsWithAssignments = clients.map(client => {
+        const clientsWithAssignments = clients.map((client) => {
             const clientObj = client.toObject();
+            const { assignedTo, ...clientWithoutAssignedTo } = clientObj; // remove from response
+
             return {
-                ...clientObj,
-                assignedStaff: clientObj.assignedTo ? {
-                    staffId: clientObj.assignedTo._id,
-                    staffName: `${clientObj.assignedTo.first_name} ${clientObj.assignedTo.last_name}`,
-                    staffEmail: clientObj.assignedTo.email
-                } : null,
+                ...clientWithoutAssignedTo,
+                assignedStaff: assignedTo
+                    ? {
+                        staffId: assignedTo._id,
+                        staffName: `${assignedTo.first_name} ${assignedTo.last_name}`,
+                        staffEmail: assignedTo.email,
+                    }
+                    : null,
                 progress: progressMap[client._id.toString()] || {
                     onboarding: { completed: false, step: null },
-                    subscription: { status: 'none', planName: null, interval: null, expiresAt: null },
-                    integrations: { amazon: false, shopify: false }
-                }
+                    subscription: { status: "none", planName: null, interval: null, expiresAt: null },
+                    integrations: { amazon: false, shopify: false },
+                },
             };
         });
+
 
         resModel.success = true;
         resModel.message = "Clients with assignments and progress retrieved successfully";
