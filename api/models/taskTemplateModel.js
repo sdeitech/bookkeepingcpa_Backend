@@ -99,6 +99,13 @@ const taskTemplateSchema = new mongoose.Schema(
             default: ['ADMIN', 'STAFF']
             // Who can use this template to create tasks
         },
+
+        assignableTo: {
+            type: [String],
+            enum: ['ADMIN', 'STAFF', 'CLIENT'],
+            default: ['STAFF', 'CLIENT']
+            // Who tasks created from this template can be assigned to
+        },
         
         // TEMPLATE TYPE
         isSystemTemplate: {
@@ -146,6 +153,7 @@ taskTemplateSchema.index({ category: 1, active: 1 });
 taskTemplateSchema.index({ createdBy: 1 });
 taskTemplateSchema.index({ isSystemTemplate: 1, active: 1 });
 taskTemplateSchema.index({ usageCount: -1 }); // For "most used" queries
+taskTemplateSchema.index({ assignableTo: 1, active: 1 });
 
 // VALIDATION: Ensure type-specific fields are set correctly
 taskTemplateSchema.pre('save', function(next) {

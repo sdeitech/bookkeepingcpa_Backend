@@ -7,6 +7,8 @@ const notificationHelper = require('../helpers/notificationHelper');
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const s3 = require("../config/s3");
 
+const DEFAULT_TEMPLATE_ASSIGNABLE_TO = ['STAFF', 'CLIENT'];
+
 // CREATE TASK
 exports.createTask = async (req, res) => {
     try {
@@ -93,6 +95,39 @@ exports.createTask = async (req, res) => {
             assignedToRole = 'ADMIN';
             if (clientId) {
                 finalClientId = clientId;
+            }
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid assignee role'
+            });
+        }
+
+        if (templateId) {
+            const template = await TaskTemplate.findById(templateId).select('assignableTo active name');
+            if (!template) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Template not found'
+                });
+            }
+
+            if (template.active === false) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cannot create task from inactive template'
+                });
+            }
+
+            const templateAssignableTo = Array.isArray(template.assignableTo) && template.assignableTo.length > 0
+                ? template.assignableTo
+                : DEFAULT_TEMPLATE_ASSIGNABLE_TO;
+
+            if (!templateAssignableTo.includes(assignedToRole)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Template cannot be assigned to this role'
+                });
             }
         }
 
