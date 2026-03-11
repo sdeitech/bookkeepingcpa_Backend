@@ -94,8 +94,8 @@ const PORT = process.env.PORT || 8081;
 const server = process.env.NODE_ENV === "staging"
     ? https.createServer(
         {
-            key: fs.readFileSync("/home/ubuntu/ssl/privkey.pem"),
-            cert: fs.readFileSync("/home/ubuntu/ssl/fullchain.pem")
+            // key: fs.readFileSync("/home/ubuntu/ssl/privkey.pem"),
+            // cert: fs.readFileSync("/home/ubuntu/ssl/fullchain.pem")
         },
         app
     )
