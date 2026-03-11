@@ -1,11 +1,69 @@
 const TaskTemplate = require('../models/taskTemplateModel');
 const Task = require('../models/taskModel');
 
+const DEFAULT_ASSIGNABLE_TO = ['STAFF', 'CLIENT'];
+const VALID_ASSIGNABLE_ROLES = ['ADMIN', 'STAFF', 'CLIENT'];
+const normalizeAssignableRoles = (roles) => (
+    Array.isArray(roles)
+        ? roles.map((role) => String(role).toUpperCase())
+        : roles
+);
+
+const normalizeTemplateAssignableTo = (template) => {
+    const templateObj = template?.toObject ? template.toObject() : template;
+    const assignableTo = Array.isArray(templateObj?.assignableTo) && templateObj.assignableTo.length > 0
+        ? templateObj.assignableTo
+        : DEFAULT_ASSIGNABLE_TO;
+
+    return {
+        ...templateObj,
+        assignableTo
+    };
+};
+
+const buildRequiredDocuments = ({ taskType, requiredDocuments, documentType }) => {
+    if (taskType !== 'DOCUMENT_UPLOAD') return [];
+
+    if (Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
+        return requiredDocuments
+            .map((doc) => {
+                if (typeof doc === 'string') {
+                    return {
+                        type: doc.trim(),
+                        isCustom: false,
+                        isRequired: true
+                    };
+                }
+
+                if (doc && typeof doc === 'object' && typeof doc.type === 'string') {
+                    return {
+                        type: doc.type.trim(),
+                        isCustom: Boolean(doc.isCustom),
+                        isRequired: doc.isRequired !== false
+                    };
+                }
+
+                return null;
+            })
+            .filter((doc) => doc && doc.type);
+    }
+
+    if (typeof documentType === 'string' && documentType.trim()) {
+        return [{
+            type: documentType.trim(),
+            isCustom: false,
+            isRequired: true
+        }];
+    }
+
+    return [];
+};
+
 // GET ALL TEMPLATES (with filters)
 exports.getTemplates = async (req, res) => {
     try {
         const user = req.user;
-        const { category, active } = req.query;
+        const { category, active, assignableTo } = req.query;
         
         let query = {};
         
@@ -30,25 +88,46 @@ exports.getTemplates = async (req, res) => {
         // Role-based filtering
         const userRole = user.role_id === '1' ? 'ADMIN' : 'STAFF';
         query.availableFor = { $in: [userRole] };
+
+        if (assignableTo) {
+            const assignableRole = String(assignableTo).toUpperCase();
+            if (!VALID_ASSIGNABLE_ROLES.includes(assignableRole)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid assignableTo role. Allowed: ADMIN, STAFF, CLIENT'
+                });
+            }
+
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { assignableTo: { $in: [assignableRole] } },
+                    { assignableTo: { $exists: false } },
+                    { assignableTo: { $size: 0 } }
+                ]
+            });
+        }
         
         const templates = await TaskTemplate.find(query)
             .populate('createdBy', 'first_name last_name email')
             .sort({ isSystemTemplate: -1, usageCount: -1, name: 1 });
+
+        const normalizedTemplates = templates.map(normalizeTemplateAssignableTo);
         
         // Group by category for easier UI rendering
         const grouped = {
-            DOCUMENT_UPLOAD: templates.filter(t => t.category === 'DOCUMENT_UPLOAD'),
-            INTEGRATION: templates.filter(t => t.category === 'INTEGRATION'),
-            ACTION: templates.filter(t => t.category === 'ACTION'),
-            REVIEW: templates.filter(t => t.category === 'REVIEW')
+            DOCUMENT_UPLOAD: normalizedTemplates.filter(t => t.category === 'DOCUMENT_UPLOAD'),
+            INTEGRATION: normalizedTemplates.filter(t => t.category === 'INTEGRATION'),
+            ACTION: normalizedTemplates.filter(t => t.category === 'ACTION'),
+            REVIEW: normalizedTemplates.filter(t => t.category === 'REVIEW')
         };
         
         res.status(200).json({
             success: true,
             data: {
-                templates,
+                templates: normalizedTemplates,
                 grouped,
-                total: templates.length
+                total: normalizedTemplates.length
             }
         });
         
@@ -88,9 +167,11 @@ exports.getTemplate = async (req, res) => {
             });
         }
         
+        const normalizedTemplate = normalizeTemplateAssignableTo(template);
+
         res.status(200).json({
             success: true,
-            data: template
+            data: normalizedTemplate
         });
         
     } catch (error) {
@@ -113,12 +194,14 @@ exports.createTemplate = async (req, res) => {
             category,
             taskType,
             documentType,
+            requiredDocuments,
             integrationType,
             actionCategory,
             defaultPriority,
             defaultDueInDays,
             visibility,
-            availableFor
+            availableFor,
+            assignableTo
         } = req.body;
         
         // Validate required fields
@@ -130,10 +213,16 @@ exports.createTemplate = async (req, res) => {
         }
         
         // Validate type-specific fields
-        if (taskType === 'DOCUMENT_UPLOAD' && !documentType) {
+        const normalizedRequiredDocuments = buildRequiredDocuments({
+            taskType,
+            requiredDocuments,
+            documentType
+        });
+
+        if (taskType === 'DOCUMENT_UPLOAD' && normalizedRequiredDocuments.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'documentType is required for DOCUMENT_UPLOAD templates'
+                message: 'requiredDocuments (or documentType) is required for DOCUMENT_UPLOAD templates'
             });
         }
         
@@ -150,6 +239,15 @@ exports.createTemplate = async (req, res) => {
                 message: 'actionCategory is required for ACTION templates'
             });
         }
+
+        const normalizedAssignableTo = normalizeAssignableRoles(assignableTo);
+
+        if (normalizedAssignableTo && (!Array.isArray(normalizedAssignableTo) || normalizedAssignableTo.length === 0 || !normalizedAssignableTo.every(role => VALID_ASSIGNABLE_ROLES.includes(role)))) {
+            return res.status(400).json({
+                success: false,
+                message: 'assignableTo must be a non-empty array with values: ADMIN, STAFF, CLIENT'
+            });
+        }
         
         // Create template
         const template = await TaskTemplate.create({
@@ -157,13 +255,14 @@ exports.createTemplate = async (req, res) => {
             description,
             category,
             taskType,
-            documentType: documentType || null,
+            requiredDocuments: normalizedRequiredDocuments,
             integrationType: integrationType || null,
             actionCategory: actionCategory || null,
             defaultPriority: defaultPriority || 'MEDIUM',
             defaultDueInDays: defaultDueInDays || 7,
             visibility: visibility || 'ORGANIZATION',
             availableFor: availableFor || ['ADMIN', 'STAFF'],
+            assignableTo: normalizedAssignableTo || DEFAULT_ASSIGNABLE_TO,
             isSystemTemplate: false,
             createdBy: user._id,
             active: true
@@ -196,12 +295,14 @@ exports.updateTemplate = async (req, res) => {
             name,
             description,
             documentType,
+            requiredDocuments,
             integrationType,
             actionCategory,
             defaultPriority,
             defaultDueInDays,
             visibility,
             availableFor,
+            assignableTo,
             active
         } = req.body;
         
@@ -232,13 +333,41 @@ exports.updateTemplate = async (req, res) => {
         // Update fields
         if (name) template.name = name;
         if (description !== undefined) template.description = description;
-        if (documentType !== undefined) template.documentType = documentType;
+        if (requiredDocuments !== undefined || documentType !== undefined) {
+            const normalizedRequiredDocuments = buildRequiredDocuments({
+                taskType: template.taskType,
+                requiredDocuments,
+                documentType
+            });
+
+            if (template.taskType === 'DOCUMENT_UPLOAD' && normalizedRequiredDocuments.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'requiredDocuments (or documentType) is required for DOCUMENT_UPLOAD templates'
+                });
+            }
+
+            if (template.taskType === 'DOCUMENT_UPLOAD') {
+                template.requiredDocuments = normalizedRequiredDocuments;
+            }
+        }
         if (integrationType !== undefined) template.integrationType = integrationType;
         if (actionCategory !== undefined) template.actionCategory = actionCategory;
         if (defaultPriority) template.defaultPriority = defaultPriority;
         if (defaultDueInDays) template.defaultDueInDays = defaultDueInDays;
         if (visibility) template.visibility = visibility;
         if (availableFor) template.availableFor = availableFor;
+        if (assignableTo) {
+            const normalizedAssignableTo = normalizeAssignableRoles(assignableTo);
+
+            if (!Array.isArray(normalizedAssignableTo) || normalizedAssignableTo.length === 0 || !normalizedAssignableTo.every(role => VALID_ASSIGNABLE_ROLES.includes(role))) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'assignableTo must be a non-empty array with values: ADMIN, STAFF, CLIENT'
+                });
+            }
+            template.assignableTo = normalizedAssignableTo;
+        }
         if (active !== undefined) template.active = active;
         
         await template.save();

@@ -1,29 +1,10 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
 /* ===============================
-   PROFILE PICTURE (LOCAL)
+   PROFILE PICTURE (S3 VIA MEMORY)
 ================================= */
 
-// Ensure upload directory exists
-const profileImagesDir = path.join(__dirname, '../uploads/profile-images');
-
-if (!fs.existsSync(profileImagesDir)) {
-    fs.mkdirSync(profileImagesDir, { recursive: true });
-}
-
-const profilePictureStorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, profileImagesDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        const userId = req.userInfo?.id || 'unknown';
-        cb(null, `profile-${userId}-${uniqueSuffix}${ext}`);
-    }
-});
+const profilePictureStorage = multer.memoryStorage();
 
 const profilePictureFilter = (req, file, cb) => {
     const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];

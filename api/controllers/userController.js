@@ -1,11 +1,44 @@
 const becryptService = require('../services/bcrypt.services');
 const jwtService = require('../services/jwt.services');
 const resModel = require('../lib/resModel');
+const path = require('path');
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 let User = require("../models/userModel");
 let Role = require("../models/roleModel");
 let Onboarding = require("../models/onboarding.model");
 const bcryptServices = require('../services/bcrypt.services');
 const emailService = require('../services/email.service');
+const s3 = require("../config/s3");
+
+const PROFILE_URL_EXPIRES_IN = 600;
+const PROFILE_IMAGES_PREFIX = 'profile-images/';
+
+const buildProfileSignedUrl = async (profileValue) => {
+    if (!profileValue) return null;
+    if (/^https?:\/\//i.test(profileValue)) return profileValue;
+
+    const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: profileValue
+    });
+
+    return getSignedUrl(s3, command, { expiresIn: PROFILE_URL_EXPIRES_IN });
+};
+
+const extractProfileS3Key = (profileValue) => {
+    if (!profileValue) return null;
+    if (!/^https?:\/\//i.test(profileValue)) return profileValue;
+
+    try {
+        const parsedUrl = new URL(profileValue);
+        return decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, '')) || null;
+    } catch (error) {
+        return null;
+    }
+};
+
+const isManagedProfileKey = (key) => typeof key === 'string' && key.startsWith(PROFILE_IMAGES_PREFIX);
 
 /**
  * @api {post} /api/admin/signup Signup User
@@ -388,10 +421,13 @@ module.exports.getCurrentUser = async (req, res) => {
             });
         }
 
+        const userResponse = user.toObject();
+        userResponse.profileSignedUrl = await buildProfileSignedUrl(userResponse.profile);
+
         return res.status(200).json({
             success: true,
             message: "User profile retrieved successfully",
-            data: user
+            data: userResponse
         });
 
     } catch (error) {
@@ -611,13 +647,34 @@ module.exports.uploadProfilePicture = async (req, res) => {
             });
         }
 
-        // Get file path (multer middleware should have already saved the file)
-        const profilePicturePath = `/uploads/profile-images/${req.file.filename}`;
+        const existingUser = await User.findById(userId).select('profile');
+        if (!existingUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                data: null
+            });
+        }
+
+        const oldProfileKey = extractProfileS3Key(existingUser.profile);
+
+        const fileExtension = path.extname(req.file.originalname) || '';
+        const fileKey = `profile-images/profile-${userId}-${Date.now()}${fileExtension}`;
+
+        await s3.send(
+            new PutObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: fileKey,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype
+            })
+        );
+        const profilePictureSignedUrl = await buildProfileSignedUrl(fileKey);
 
         // Update user profile with new picture path
         const updatedUser = await User.findByIdAndUpdate(
             userId,
-            { $set: { profile: profilePicturePath } },
+            { $set: { profile: fileKey } },
             {
                 new: true,
                 select: '-password'
@@ -632,17 +689,89 @@ module.exports.uploadProfilePicture = async (req, res) => {
             });
         }
 
+        if (oldProfileKey && oldProfileKey !== fileKey && isManagedProfileKey(oldProfileKey)) {
+            try {
+                await s3.send(
+                    new DeleteObjectCommand({
+                        Bucket: process.env.AWS_BUCKET_NAME,
+                        Key: oldProfileKey
+                    })
+                );
+            } catch (deleteError) {
+                console.error("Warning: failed to delete previous profile picture:", deleteError);
+            }
+        }
+
         return res.status(200).json({
             success: true,
             message: "Profile picture updated successfully",
             data: {
                 user: updatedUser,
-                profilePicturePath
+                profilePicturePath: fileKey,
+                profilePictureSignedUrl
             }
         });
 
     } catch (error) {
         console.error("Error in uploadProfilePicture:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            data: null
+        });
+    }
+};
+
+/**
+ * Delete Profile Picture
+ * DELETE /api/user/profile/picture
+ * Protected route - requires authentication
+ */
+module.exports.deleteProfilePicture = async (req, res) => {
+    try {
+        const userId = req.userInfo?.id;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please login",
+                data: null
+            });
+        }
+
+        const user = await User.findById(userId).select('profile');
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                data: null
+            });
+        }
+
+        const oldProfileKey = extractProfileS3Key(user.profile);
+
+        if (oldProfileKey && isManagedProfileKey(oldProfileKey)) {
+            await s3.send(
+                new DeleteObjectCommand({
+                    Bucket: process.env.AWS_BUCKET_NAME,
+                    Key: oldProfileKey
+                })
+            );
+        }
+
+        await User.findByIdAndUpdate(
+            userId,
+            { $set: { profile: null } },
+            { new: true, select: '-password' }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile picture deleted successfully",
+            data: null
+        });
+    } catch (error) {
+        console.error("Error in deleteProfilePicture:", error);
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
