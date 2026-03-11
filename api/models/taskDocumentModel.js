@@ -1,18 +1,18 @@
 const mongoose = require('mongoose');
 
 const taskDocumentSchema = new mongoose.Schema({
-  // Task reference
+  // Task reference (optional for standalone documents)
   taskId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Task',
-    required: true,
+    required: false, // Allow null for standalone documents
     index: true
   },
 
-  // Document type (links to task's requiredDocuments)
+  // Document type (optional for additional documents)
   documentType: {
     type: String,
-    required: true,
+    required: false, // Allow null for additional documents
     maxlength: 200,
     index: true
   },
@@ -119,6 +119,9 @@ taskDocumentSchema.index({ taskId: 1, documentType: 1 });
 taskDocumentSchema.index({ taskId: 1, reviewStatus: 1 });
 taskDocumentSchema.index({ userId: 1, createdAt: -1 });
 taskDocumentSchema.index({ status: 1, reviewStatus: 1 });
+// New indexes for standalone and additional documents
+taskDocumentSchema.index({ taskId: 1, status: 1 }); // For task-related queries
+taskDocumentSchema.index({ userId: 1, taskId: 1 }); // For user's documents (both task and standalone)
 
 // Virtual for download URL
 taskDocumentSchema.virtual('downloadUrl').get(function() {
@@ -151,10 +154,28 @@ taskDocumentSchema.methods.reject = async function(userId, reason) {
   return this.save();
 };
 
-// Static method to get documents by task
+// Static method to get documents by task (including additional documents)
 taskDocumentSchema.statics.getByTask = function(taskId) {
   return this.find({
     taskId,
+    status: 'active'
+  }).sort({ createdAt: -1 });
+};
+
+// Static method to get standalone documents by user
+taskDocumentSchema.statics.getStandaloneByUser = function(userId) {
+  return this.find({
+    taskId: null, // Standalone documents have no task
+    userId,
+    status: 'active'
+  }).sort({ createdAt: -1 });
+};
+
+// Static method to get additional documents for a task
+taskDocumentSchema.statics.getAdditionalByTask = function(taskId) {
+  return this.find({
+    taskId,
+    documentType: null, // Additional documents have no specific type
     status: 'active'
   }).sort({ createdAt: -1 });
 };

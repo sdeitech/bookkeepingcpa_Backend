@@ -184,6 +184,22 @@ const taskSchema = new mongoose.Schema(
         notifications: {
             dueSoonSent: { type: Boolean, default: false },
             lastOverdueReminderSent: { type: Date, default: null }
+        },
+
+        // SOFT DELETE FIELDS
+        deleted: { 
+            type: Boolean, 
+            default: false,
+            index: true // Index for performance when filtering out deleted tasks
+        },
+        deletedAt: { 
+            type: Date, 
+            default: null 
+        },
+        deletedBy: { 
+            type: mongoose.Schema.Types.ObjectId, 
+            ref: 'User', 
+            default: null 
         }
     },
     { timestamps: true }

@@ -222,6 +222,7 @@ const authorize = (resource, action) => {
       if (action === 'view' || action === 'update' || action === 'upload' || 
           action === 'approve' || action === 'reject' || action === 'help' || 
           action === 'updateStatus') {
+        // Admin can access deleted tasks (for viewing documents, etc.)
         const task = await Task.findById(taskId);
         if (!task) {
           return res.status(404).json({ success: false, message: 'Task not found' });
@@ -307,6 +308,14 @@ const authorize = (resource, action) => {
         message: 'Task not found'
       });
     }
+
+    // Restrict access to deleted tasks for non-admin users
+    if (task.deleted && user.role_id !== '1') {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
     
     // Staff (role_id = '2') can access tasks for their assigned clients OR tasks assigned to them
     if (user.role_id === '2') {
@@ -381,6 +390,14 @@ const authorize = (resource, action) => {
       return res.status(404).json({
         success: false,
         message: 'Task not found'
+      });
+    }
+
+    // Cannot update status of deleted tasks
+    if (task.deleted) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot update status of deleted task'
       });
     }
     

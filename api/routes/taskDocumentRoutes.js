@@ -1,6 +1,7 @@
 const taskDocumentController = require('../controllers/taskDocumentController');
 const auth = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
+const { uploadDocument } = require('../services/multer.services');
 const bodyParser = require('body-parser');
 
 module.exports = function (app, validator) {
@@ -52,5 +53,12 @@ module.exports = function (app, validator) {
   app.get('/api/documents/:documentId/url',
     auth,
     taskDocumentController.getDocumentUrl
+  );
+
+  // Upload standalone document (not related to any task)
+  app.post('/api/documents/standalone',
+    auth,
+    uploadDocument.single('file'),
+    taskDocumentController.uploadStandaloneDocument
   );
 };

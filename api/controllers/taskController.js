@@ -235,6 +235,9 @@ exports.getTasks = async (req, res) => {
         // Build query based on user role
         let query = {};
 
+        // Exclude deleted tasks by default (unless explicitly requested)
+        query.deleted = { $ne: true };
+
         if (user.role_id === '1') { // ADMIN
             // Admin can see all tasks
             if (clientId) query.clientId = clientId;
@@ -627,12 +630,29 @@ exports.updateTask = async (req, res) => {
     }
 };
 
-// DELETE TASK
+// DELETE TASK (SOFT DELETE)
 exports.deleteTask = async (req, res) => {
     try {
         const taskId = req.params.taskId || req.params.id;
+        const userId = req.user.id;
 
-        await Task.findByIdAndDelete(taskId);
+        // Soft delete the task instead of hard delete
+        const updatedTask = await Task.findByIdAndUpdate(
+            taskId,
+            {
+                deleted: true,
+                deletedAt: new Date(),
+                deletedBy: userId
+            },
+            { new: true }
+        );
+
+        if (!updatedTask) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found'
+            });
+        }
 
         res.status(200).json({
             success: true,
@@ -747,7 +767,7 @@ exports.uploadDocument = async (req, res) => {
     try {
         const task = req.task;
         const user = req.user;
-        const { documentType } = req.body;
+        const { documentType, isAdditional } = req.body;
 
         if (!req.file) {
             return res.status(400).json({
@@ -756,8 +776,15 @@ exports.uploadDocument = async (req, res) => {
             });
         }
 
-        // 🔥 Generate S3 file key
-        const fileKey = `documents/${task._id}/${Date.now()}-${req.file.originalname}`;
+        // 🔥 Generate S3 file key based on document type
+        let fileKey;
+        if (documentType && !isAdditional) {
+            // Required document with specific type
+            fileKey = `task-documents/${task._id}/${documentType}/${Date.now()}-${req.file.originalname}`;
+        } else {
+            // Additional document (no specific type)
+            fileKey = `task-documents/${task._id}/additional/${Date.now()}-${req.file.originalname}`;
+        }
 
         // 🔥 Upload to S3 (PRIVATE)
         await s3.send(
@@ -772,7 +799,7 @@ exports.uploadDocument = async (req, res) => {
         // Create TaskDocument record
         const taskDocument = await TaskDocument.create({
             taskId: task._id,
-            documentType: documentType,
+            documentType: isAdditional ? null : documentType, // null for additional documents
             userId: task.clientId,
             fileName: req.file.originalname,
             originalName: req.file.originalname,
@@ -784,8 +811,8 @@ exports.uploadDocument = async (req, res) => {
             status: 'active'
         });
 
-        // ===== Your Existing Logic (unchanged) =====
-        if (documentType && task.requiredDocuments?.length > 0) {
+        // ===== Handle Required Documents Logic =====
+        if (documentType && !isAdditional && task.requiredDocuments?.length > 0) {
             const requiredDoc = task.requiredDocuments.find(rd => rd.type === documentType);
             if (requiredDoc) {
                 requiredDoc.uploaded = true;
@@ -832,10 +859,12 @@ exports.uploadDocument = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Document uploaded successfully',
+            message: isAdditional ? 'Additional document uploaded successfully' : 'Document uploaded successfully',
             data: {
                 taskId: task._id,
-                documentId: taskDocument._id
+                documentId: taskDocument._id,
+                documentType: taskDocument.documentType,
+                isAdditional: isAdditional || false
             }
         });
 
