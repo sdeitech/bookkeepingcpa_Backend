@@ -91,7 +91,8 @@ app.use('*', (req, res) => {
 
 
 const PORT = process.env.PORT || 8081;
-const server = process.env.NODE_ENV 
+const server =
+//  process.env.NODE_ENV 
 // === "staging"
 //     ? https.createServer(
 //         {
