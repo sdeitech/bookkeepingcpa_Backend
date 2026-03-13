@@ -13,7 +13,7 @@ yarn-error.log*
 .env.dev
 .env.test.local
 .env.prod
-# .env.staging 
+.env.staging 
 
 # Logs
 logs/
